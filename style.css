@@ -1,10 +1,30 @@
 /* Custom table styles */
 .table {
     font-family: 'Roboto Mono', 'Courier New', Courier, monospace;
+    font-size: 0.85em; /* Slightly smaller font for split view */
 }
 
 .table thead th {
     background-color: #e9ecef; /* Slightly darker grey for header */
+    font-size: 0.8em; /* Smaller header text */
+    padding: 0.5rem; /* Reduce padding */
+}
+
+.table tbody td {
+    padding: 0.4rem; /* Reduce cell padding */
+    word-break: break-word; /* Allow text wrapping */
+    max-width: 150px; /* Limit column width */
+}
+
+/* Ensure table container doesn't overflow */
+#table-container {
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+/* Responsive table styling */
+.table-responsive {
+    border: none;
 }
 
 /* Bootstrap's table-striped class already provides alternating row colors. */
@@ -15,3 +35,78 @@
     background-color: #f8f9fa; 
 }
 */
+
+/* Map styles */
+#map-container {
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+}
+
+.view-controls {
+    display: flex;
+    justify-content: center;
+}
+
+.popup-content {
+    font-size: 0.9em;
+    max-width: 200px;
+}
+
+.popup-content strong {
+    color: #495057;
+}
+
+/* Responsive adjustments for split view */
+@media (max-width: 768px) {
+    #table-panel, #map-panel {
+        margin-bottom: 2rem;
+    }
+    
+    .table {
+        font-size: 0.75em; /* Even smaller on mobile */
+    }
+    
+    .table tbody td {
+        max-width: 100px; /* Smaller column width on mobile */
+        padding: 0.3rem;
+    }
+    
+    #map-container {
+        height: 400px; /* Smaller map on mobile */
+    }
+}
+
+/* Section headers */
+#table-panel h5, #map-panel h5 {
+    color: #495057;
+    border-bottom: 2px solid #dee2e6;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+/* Form styling improvements */
+.form-label {
+    font-weight: 600;
+    color: #495057;
+}
+
+#geojson-source {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 0.9em;
+}
+
+.form-text {
+    font-size: 0.85em;
+}
+
+/* Example query buttons */
+.btn-group .btn {
+    font-size: 0.85em;
+    padding: 0.375rem 0.75rem;
+}
+
+/* Query input styling */
+#sql-query {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 0.9em;
+}
