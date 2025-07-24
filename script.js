@@ -9,10 +9,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     const query1Button = document.getElementById('query1-button');
     const query2Button = document.getElementById('query2-button');
     const query3Button = document.getElementById('query3-button');
+    const query4Button = document.getElementById('query4-button');
+    const query5Button = document.getElementById('query5-button');
+    const query6Button = document.getElementById('query6-button');
+    const query7Button = document.getElementById('query7-button');
+    
+    // New UI elements
+    const validateUrlButton = document.getElementById('validate-url');
+    const urlStatusSpan = document.getElementById('url-status');
+    const sampleDatasets = document.getElementById('sample-datasets');
+    const schemaSection = document.getElementById('schema-section');
+    const getSchemaButton = document.getElementById('get-schema');
+    const schemaContent = document.getElementById('schema-content');
+    const manualMode = document.getElementById('manual-mode');
+    const builderMode = document.getElementById('builder-mode');
+    const manualQuerySection = document.getElementById('manual-query-section');
+    const queryBuilderSection = document.getElementById('query-builder-section');
+    const columnSelector = document.getElementById('column-selector');
+    const generateQueryButton = document.getElementById('generate-query');
+    const addFilterButton = document.getElementById('add-filter');
+    const useGroupBy = document.getElementById('use-groupby');
+    const groupByColumn = document.getElementById('groupby-column');
+    const orderByColumn = document.getElementById('orderby-column');
+    
+    
     
     const tablePanel = document.getElementById('table-panel');
-    const mapPanel = document.getElementById('map-panel');
-    const mapContainer = document.getElementById('map-container');
 
     let db;
     let currentData = [];
@@ -20,9 +42,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     let sortDirection = 'asc';
     let currentPage = 1;
     const rowsPerPage = 10;
-    let spatialEnabled = false;
-    let map = null;
-    let currentMapLayer = null;
+    let schemaData = null;
+    let modelStartTimes = {}; // Cache for model start times
+    let currentStartTime = '1981-01-01T00:00:00Z'; // Default fallback
+    let hruData = null; // Cache for HRU data
 
     async function init() {
         try {
@@ -33,8 +56,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             db = new window.duckdb.AsyncDuckDB(logger, worker);
             await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
             
-            // Load spatial extension
-            await loadSpatialExtension();
+            // Load HRU data
+            await loadHruData();
             
             executeButton.disabled = false;
             updateStatusMessage();
@@ -44,57 +67,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    async function loadSpatialExtension() {
+    // Load HRU data from JSON file
+    async function loadHruData() {
         try {
-            statusMessage.textContent = 'Loading spatial extension...';
-            const conn = await db.connect();
-            await conn.query('LOAD spatial;');
-            
-            // Test spatial extension is working
-            await conn.query('SELECT ST_Point(0, 0) as test_point;');
-            conn.close();
-            
-            spatialEnabled = true;
-            console.log('Spatial extension loaded successfully');
-        } catch (e) {
-            spatialEnabled = false;
-            console.warn('Spatial extension not available:', e.message);
+            const response = await fetch('hrus.json');
+            hruData = await response.json();
+            console.log('Loaded HRU data:', hruData);
+        } catch (error) {
+            console.warn('Could not load HRU data:', error);
+            hruData = [];
         }
     }
 
+
     function updateStatusMessage() {
-        if (spatialEnabled) {
-            statusMessage.textContent = 'DuckDB with spatial extension is ready. Enter a query and click Execute.';
-            // Update button labels for spatial queries
-            query1Button.textContent = 'Largest Grid Cells';
-            query2Button.textContent = 'Grid Centroids (48-49°N)';
-            query3Button.textContent = 'Grids in Bounding Box';
-        } else {
-            statusMessage.textContent = 'DuckDB is ready (spatial extension unavailable). Enter a query and click Execute.';
-            // Update button labels for fallback queries
-            query1Button.textContent = 'Grid Sample';
-            query2Button.textContent = 'Count Grid Cells';
-            query3Button.textContent = 'Grid Properties';
-        }
+        statusMessage.textContent = 'DuckDB is ready. Enter a query and click Execute.';
+        // Update button labels for parquet queries
+        query1Button.textContent = 'First 10 Rows';
+        query2Button.textContent = 'Count Records';
+        query3Button.textContent = 'Column Info';
     }
 
     await init();
 
-    // Initialize map immediately
-    function initializeMap() {
-        if (!map) {
-            map = L.map(mapContainer).setView([48.5, -122], 8);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors'
-            }).addTo(map);
-        }
-    }
-
-    // Initialize map on page load
-    initializeMap();
-    
-    // Trigger map resize after a short delay to ensure proper sizing
-    setTimeout(() => map.invalidateSize(), 100);
 
     // Update query when source changes
     function updateQueryWithSource() {
@@ -119,283 +114,476 @@ document.addEventListener('DOMContentLoaded', async () => {
         sqlQuery.value = sqlQuery.placeholder;
     }
 
-    // Geometry detection and parsing functions
-    function detectGeometryColumns(data) {
-        if (!data || data.length === 0) return [];
-        
-        const columns = Object.keys(data[0]);
-        const geometryColumns = [];
-        
-        console.log('Checking columns:', columns);
-        
-        // Check for common geometry column names
-        if (columns.includes('geom')) {
-            console.log('Found geom column');
-            geometryColumns.push({ name: 'geom', type: 'geometry' });
-        }
-        if (columns.includes('geometry')) {
-            console.log('Found geometry column');
-            geometryColumns.push({ name: 'geometry', type: 'geojson_string' });
+
+
+    // Data source management functions
+    async function validateUrl() {
+        const url = geojsonSource.value.trim();
+        if (!url) {
+            urlStatusSpan.textContent = '❌';
+            return false;
         }
         
-        // Check for WKT columns (containing geometry text)
-        columns.forEach(col => {
-            const sampleValue = data[0][col];
-            const preview = typeof sampleValue === 'string' ? 
-                sampleValue.substring(0, 50) + '...' : 
-                String(sampleValue);
-            console.log(`Checking column ${col}:`, typeof sampleValue, preview);
-            
-            if (typeof sampleValue === 'string' && isWKT(sampleValue)) {
-                console.log(`Found WKT column: ${col}`);
-                geometryColumns.push({ name: col, type: 'wkt' });
-            }
-        });
-        
-        // Also check for any column that looks like it contains geometry data
-        columns.forEach(col => {
-            const sampleValue = data[0][col];
-            if (typeof sampleValue === 'object' && sampleValue && 
-                (sampleValue.type || sampleValue.coordinates)) {
-                console.log(`Found GeoJSON column: ${col}`);
-                geometryColumns.push({ name: col, type: 'geojson' });
-            }
-        });
-        
-        return geometryColumns;
-    }
-
-    function isWKT(str) {
-        if (typeof str !== 'string') return false;
-        // More flexible WKT detection - look for geometry type keywords
-        const wktPattern = /^(POINT|LINESTRING|POLYGON|MULTIPOINT|MULTILINESTRING|MULTIPOLYGON|GEOMETRYCOLLECTION)\s*\(/i;
-        const result = wktPattern.test(str.trim());
-        console.log(`Testing WKT for "${str.substring(0, 30)}...": ${result}`);
-        return result;
-    }
-
-    function parseWKTToGeoJSON(wktString) {
         try {
-            // Simple WKT parser for basic geometries
-            const wkt = wktString.trim();
-            
-            if (wkt.startsWith('POINT')) {
-                const coords = wkt.match(/POINT\s*\(\s*([^)]+)\)/i);
-                if (coords) {
-                    const [lon, lat] = coords[1].split(/\s+/).map(Number);
-                    return {
-                        type: 'Point',
-                        coordinates: [lon, lat]
-                    };
-                }
+            urlStatusSpan.textContent = '⏳';
+            const response = await fetch(url, { method: 'HEAD' });
+            if (response.ok) {
+                urlStatusSpan.textContent = '✅';
+                schemaSection.style.display = 'block';
+                return true;
+            } else {
+                urlStatusSpan.textContent = '❌';
+                return false;
             }
-            
-            if (wkt.startsWith('POLYGON')) {
-                // Basic polygon parsing - simplified for demo
-                const coords = wkt.match(/POLYGON\s*\(\s*\(([^)]+)\)\s*\)/i);
-                if (coords) {
-                    const points = coords[1].split(',').map(point => {
-                        const [lon, lat] = point.trim().split(/\s+/).map(Number);
-                        return [lon, lat];
-                    });
-                    return {
-                        type: 'Polygon',
-                        coordinates: [points]
-                    };
-                }
-            }
-        } catch (e) {
-            console.warn('Failed to parse WKT:', wktString, e);
+        } catch (error) {
+            urlStatusSpan.textContent = '❌';
+            console.error('URL validation error:', error);
+            return false;
         }
-        return null;
     }
 
-    function convertDataToGeoJSON(data, geometryColumns) {
-        console.log('convertDataToGeoJSON called with:', { data: data.length, geometryColumns });
-        if (!geometryColumns.length) return null;
-        
-        const features = [];
-        
-        data.forEach((row, index) => {
-            const geomCol = geometryColumns[0]; // Use first geometry column
-            let geometry = null;
+    // Schema management functions
+    async function getSchema() {
+        const sourceUrl = geojsonSource.value.trim();
+        if (!sourceUrl) {
+            alert('Please enter a Parquet source URL first');
+            return;
+        }
+
+        try {
+            const conn = await db.connect();
+            const query = `DESCRIBE SELECT * FROM '${sourceUrl}' LIMIT 1`;
+            const result = await conn.query(query);
             
-            console.log(`Processing row ${index}, geomCol:`, geomCol, 'value:', row[geomCol.name]);
-            
-            if (geomCol.type === 'wkt' && row[geomCol.name]) {
-                geometry = parseWKTToGeoJSON(row[geomCol.name]);
-                console.log('Parsed WKT to geometry:', geometry);
-            } else if (geomCol.type === 'geojson_string' && row[geomCol.name]) {
-                // Handle GeoJSON string from ST_AsGeoJSON()
-                try {
-                    geometry = JSON.parse(row[geomCol.name]);
-                    console.log('Parsed GeoJSON string to geometry:', geometry);
-                } catch (e) {
-                    console.error('Failed to parse GeoJSON string:', e);
-                }
-            } else if (geomCol.type === 'geometry' && row[geomCol.name]) {
-                // Handle native geometry from ST_Read - it might be in WKB or GeoJSON format
-                const geomData = row[geomCol.name];
-                console.log('Native geometry data:', typeof geomData, geomData);
+            if (result.numRows > 0) {
+                schemaData = result.toArray().map(row => row.toJSON());
+                displaySchema(schemaData);
+                populateColumnSelectors(schemaData);
                 
-                if (typeof geomData === 'object' && geomData.type) {
-                    // Already GeoJSON format
-                    geometry = geomData;
-                } else if (typeof geomData === 'string' && isWKT(geomData)) {
-                    // WKT string
-                    geometry = parseWKTToGeoJSON(geomData);
-                }
-                console.log('Processed native geometry:', geometry);
+                // Detect start time for this dataset
+                await detectStartTime(conn, sourceUrl);
             }
             
-            if (geometry) {
-                const properties = { ...row };
-                delete properties[geomCol.name]; // Remove geom from properties
+            conn.close();
+        } catch (error) {
+            console.error('Schema error:', error);
+            schemaContent.innerHTML = `<span class="text-danger">Error loading schema: ${error.message}</span>`;
+        }
+    }
+
+    // Detect the start time for the current dataset
+    async function detectStartTime(conn, sourceUrl) {
+        try {
+            // Check if model column exists to identify dataset
+            const hasModelColumn = schemaData.some(col => col.column_name === 'model');
+            const hasStartTimeColumn = schemaData.some(col => col.column_name === 'start_time');
+            
+            // Get basic dataset info
+            const infoQuery = `SELECT MIN(ix) as min_ix, MAX(ix) as max_ix, COUNT(*) as total_rows FROM '${sourceUrl}'`;
+            const infoResult = await conn.query(infoQuery);
+            const dataInfo = infoResult.toArray().map(row => row.toJSON())[0];
+            
+            console.log('Dataset info:', dataInfo);
+            
+            if (hasModelColumn) {
+                // Get unique models and their minimum ix values
+                const modelQuery = `
+                    SELECT model, MIN(ix) as min_ix, MAX(ix) as max_ix, COUNT(*) as rows
+                    FROM '${sourceUrl}' 
+                    GROUP BY model 
+                    ORDER BY model
+                `;
+                const modelResult = await conn.query(modelQuery);
+                const models = modelResult.toArray().map(row => row.toJSON());
                 
-                features.push({
-                    type: 'Feature',
-                    geometry: geometry,
-                    properties: {
-                        ...properties,
-                        _row_id: index // Add row identifier for selection sync
+                if (models.length > 0) {
+                    // Use the first model's start time as reference
+                    const firstModel = models[0];
+                    const modelName = firstModel.model;
+                    
+                    // Try to determine actual start time if start_time column exists
+                    if (hasStartTimeColumn) {
+                        const startTimeQuery = `
+                            SELECT DISTINCT start_time 
+                            FROM '${sourceUrl}' 
+                            WHERE model = '${modelName}' 
+                            LIMIT 1
+                        `;
+                        const startTimeResult = await conn.query(startTimeQuery);
+                        const startTimes = startTimeResult.toArray().map(row => row.toJSON());
+                        
+                        if (startTimes.length > 0) {
+                            currentStartTime = startTimes[0].start_time;
+                            modelStartTimes[modelName] = currentStartTime;
+                            
+                            console.log(`Detected start time for ${modelName}: ${currentStartTime}`);
+                            return;
+                        }
                     }
+                    
+                    console.log(`Using default start time. Found models:`, models);
+                }
+            } else {
+                // Single dataset without model column
+                if (hasStartTimeColumn) {
+                    const startTimeQuery = `SELECT DISTINCT start_time FROM '${sourceUrl}' LIMIT 1`;
+                    const startTimeResult = await conn.query(startTimeQuery);
+                    const startTimes = startTimeResult.toArray().map(row => row.toJSON());
+                    
+                    if (startTimes.length > 0) {
+                        currentStartTime = startTimes[0].start_time;
+                        console.log(`Detected start time: ${currentStartTime}`);
+                        return;
+                    }
+                }
+                
+                // Try to infer from filename or use common climate model patterns
+                const inferredStartTime = inferStartTimeFromUrl(sourceUrl);
+                if (inferredStartTime !== currentStartTime) {
+                    currentStartTime = inferredStartTime;
+                    console.log(`Inferred start time from URL: ${currentStartTime}`);
+                } else {
+                    console.log(`No start_time column found. Using default start time. Dataset info:`, dataInfo);
+                }
+            }
+        } catch (error) {
+            console.warn('Could not detect start time:', error);
+        }
+    }
+
+
+    function displaySchema(schema) {
+        let html = '<div class="row">';
+        schema.forEach((col, index) => {
+            const columnName = col.column_name;
+            const columnType = col.column_type;
+            html += `
+                <div class="col-md-4 mb-2">
+                    <div class="border rounded p-2 bg-light">
+                        <strong>${columnName}</strong><br>
+                        <small class="text-muted">${columnType}</small>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        schemaContent.innerHTML = html;
+    }
+
+    function populateColumnSelectors(schema) {
+        const columns = schema.map(col => col.column_name);
+        
+        
+        // Clear existing options (except "All Columns")
+        columnSelector.innerHTML = '<option value="*">* (All Columns)</option>';
+        groupByColumn.innerHTML = '<option value="">Select column to group by</option>';
+        orderByColumn.innerHTML = '<option value="">Select column...</option>';
+        
+        // Populate all selectors
+        columns.forEach(col => {
+            columnSelector.innerHTML += `<option value="${col}">${col}</option>`;
+            groupByColumn.innerHTML += `<option value="${col}">${col}</option>`;
+            orderByColumn.innerHTML += `<option value="${col}">${col}</option>`;
+        });
+
+        // Populate filter column selectors
+        document.querySelectorAll('.filter-column').forEach(select => {
+            const currentValue = select.value; // Preserve current selection
+            select.innerHTML = '<option value="">Select column...</option>';
+            columns.forEach(col => {
+                select.innerHTML += `<option value="${col}">${col}</option>`;
+            });
+            
+            // Restore selection if it was previously set
+            if (currentValue) {
+                select.value = currentValue;
+            }
+            
+            // Add change handler for HRU special handling if not already added
+            if (!select.dataset.handlerAdded) {
+                select.addEventListener('change', () => {
+                    const valueContainer = select.closest('.filter-row').querySelector('.filter-value');
+                    updateFilterValueInput(select, valueContainer);
                 });
+                select.dataset.handlerAdded = 'true';
             }
         });
-        
-        console.log('Created GeoJSON with', features.length, 'features');
-        return {
-            type: 'FeatureCollection',
-            features: features
-        };
     }
 
-    // Map rendering functions
-    function renderMapData(geoJsonData) {
-        if (!map || !geoJsonData || !geoJsonData.features.length) return;
+    // DateTime conversion helper functions (now uses dynamic start time)
+    function dateToIx(dateStr, hour = 0) {
+        const targetDate = new Date(dateStr + 'T' + hour.toString().padStart(2, '0') + ':00:00Z');
+        const baseDate = new Date(currentStartTime);
+        const diffMs = targetDate.getTime() - baseDate.getTime();
+        return Math.floor(diffMs / (1000 * 60 * 60)); // Convert to hours
+    }
+
+    function ixToDate(ix) {
+        const baseDate = new Date(currentStartTime);
+        const targetDate = new Date(baseDate.getTime() + (ix * 60 * 60 * 1000));
+        return targetDate.toISOString();
+    }
+
+    // Get the current start time as SQL timestamp string
+    function getCurrentStartTimeSQL() {
+        return `'${currentStartTime.replace('Z', '')}'::TIMESTAMP`;
+    }
+
+    // Infer start time from URL patterns (common climate models)
+    function inferStartTimeFromUrl(url) {
+        // Common climate model patterns
+        const patterns = [
+            // CCSM4 models typically start in 1950 or 2006 for RCP scenarios
+            { pattern: /ccsm4.*rcp/i, startTime: '2006-01-01T00:00:00Z' },
+            { pattern: /ccsm4/i, startTime: '1950-01-01T00:00:00Z' },
+            
+            // CESM models
+            { pattern: /cesm.*rcp/i, startTime: '2006-01-01T00:00:00Z' },
+            { pattern: /cesm/i, startTime: '1850-01-01T00:00:00Z' },
+            
+            // GFDL models
+            { pattern: /gfdl.*rcp/i, startTime: '2006-01-01T00:00:00Z' },
+            { pattern: /gfdl/i, startTime: '1861-01-01T00:00:00Z' },
+            
+            // Common historical period
+            { pattern: /historical/i, startTime: '1850-01-01T00:00:00Z' },
+            
+            // RCP scenarios typically start in 2006
+            { pattern: /rcp\d+/i, startTime: '2006-01-01T00:00:00Z' },
+        ];
         
-        // Clear existing layer
-        if (currentMapLayer) {
-            map.removeLayer(currentMapLayer);
+        for (const { pattern, startTime } of patterns) {
+            if (pattern.test(url)) {
+                console.log(`Matched pattern ${pattern} in URL, using start time: ${startTime}`);
+                return startTime;
+            }
         }
         
-        // Style function for features
-        function getFeatureStyle(feature) {
-            const properties = feature.properties;
-            
-            // Color based on area if available
-            let color = '#3388ff';
-            if (properties.area_sq_degrees) {
-                const area = parseFloat(properties.area_sq_degrees);
-                if (area > 0.1) color = '#ff6b6b';
-                else if (area > 0.01) color = '#4ecdc4';
-                else color = '#45b7d1';
-            }
-            
-            return {
-                color: color,
-                weight: 2,
-                opacity: 0.8,
-                fillOpacity: 0.4
-            };
-        }
-        
-        // Point style function
-        function getPointStyle(feature) {
-            const properties = feature.properties;
-            let radius = 5;
-            
-            if (properties.area_sq_degrees) {
-                const area = parseFloat(properties.area_sq_degrees);
-                radius = Math.min(Math.max(area * 1000, 3), 15);
-            }
-            
-            return {
-                radius: radius,
-                fillColor: getFeatureStyle(feature).color,
-                color: '#000',
-                weight: 1,
-                opacity: 1,
-                fillOpacity: 0.7
-            };
-        }
-        
-        // Create layer with popups
-        currentMapLayer = L.geoJSON(geoJsonData, {
-            style: getFeatureStyle,
-            pointToLayer: function(feature, latlng) {
-                return L.circleMarker(latlng, getPointStyle(feature));
-            },
-            onEachFeature: function(feature, layer) {
-                // Create popup content
-                const props = feature.properties;
-                let popupContent = '<div class="popup-content">';
-                
-                Object.keys(props).forEach(key => {
-                    if (key !== '_row_id' && props[key] !== null) {
-                        popupContent += `<strong>${key}:</strong> ${props[key]}<br>`;
-                    }
-                });
-                
-                popupContent += '</div>';
-                layer.bindPopup(popupContent);
-                
-                // Highlight on hover
-                layer.on('mouseover', function(e) {
-                    this.setStyle({
-                        weight: 4,
-                        opacity: 1
-                    });
-                });
-                
-                layer.on('mouseout', function(e) {
-                    currentMapLayer.resetStyle(this);
-                });
-            }
-        }).addTo(map);
-        
-        // Fit map to data bounds
-        if (currentMapLayer.getBounds().isValid()) {
-            map.fitBounds(currentMapLayer.getBounds(), { padding: [20, 20] });
+        // Default fallback
+        return currentStartTime;
+    }
+
+
+
+    // Query builder functions
+    function toggleQueryMode() {
+        if (builderMode.checked) {
+            manualQuerySection.style.display = 'none';
+            queryBuilderSection.style.display = 'block';
+        } else {
+            manualQuerySection.style.display = 'block';
+            queryBuilderSection.style.display = 'none';
         }
     }
 
-    function updateMapData() {
-        const geometryColumns = detectGeometryColumns(currentData);
-        const hasGeometry = geometryColumns.length > 0;
+    function addFilterRow() {
+        const filterBuilder = document.getElementById('filter-builder');
+        const newFilterRow = document.createElement('div');
+        newFilterRow.className = 'filter-row mb-2';
+        newFilterRow.innerHTML = `
+            <div class="row g-2">
+                <div class="col-md-3">
+                    <select class="form-select filter-column">
+                        <option value="">Select column...</option>
+                        ${schemaData ? schemaData.map(col => `<option value="${col.column_name}">${col.column_name}</option>`).join('') : ''}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select filter-operator">
+                        <option value="=">=</option>
+                        <option value="!=">!=</option>
+                        <option value=">">></option>
+                        <option value="<"><</option>
+                        <option value=">=">>=</option>
+                        <option value="<="><=</option>
+                        <option value="LIKE">LIKE</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <input type="text" class="form-control filter-value" placeholder="Value">
+                </div>
+                <div class="col-md-2">
+                    <select class="form-select filter-logic">
+                        <option value="AND">AND</option>
+                        <option value="OR">OR</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="button" class="btn btn-outline-danger btn-sm remove-filter">Remove</button>
+                </div>
+            </div>
+        `;
+        filterBuilder.appendChild(newFilterRow);
         
-        console.log('Detected geometry columns:', geometryColumns);
-        console.log('Current data sample:', currentData.slice(0, 2));
-        console.log('Available columns:', currentData.length > 0 ? Object.keys(currentData[0]) : 'No data');
-        if (currentData.length > 0) {
-            console.log('Sample values:', currentData[0]);
-        }
+        // Add column change handler for HRU special handling
+        const columnSelect = newFilterRow.querySelector('.filter-column');
+        const valueInput = newFilterRow.querySelector('.filter-value');
         
-        // Always try to render geometry data if available
-        if (hasGeometry) {
-            const geoJsonData = convertDataToGeoJSON(currentData, geometryColumns);
-            if (geoJsonData) {
-                console.log('Rendering map data:', geoJsonData);
-                renderMapData(geoJsonData);
+        columnSelect.addEventListener('change', () => {
+            updateFilterValueInput(columnSelect, valueInput);
+        });
+        
+        // Add remove functionality
+        newFilterRow.querySelector('.remove-filter').addEventListener('click', () => {
+            newFilterRow.remove();
+        });
+    }
+
+    // Update filter value input based on selected column
+    function updateFilterValueInput(columnSelect, valueContainer) {
+        const selectedColumn = columnSelect.value;
+        
+        // Check if this is an HRU-related column
+        if (selectedColumn === 'hru' || selectedColumn.toLowerCase().includes('hru')) {
+            // Replace input with select dropdown for HRU values
+            if (hruData && hruData.length > 0) {
+                const hruOptions = hruData.map(hru => 
+                    `<option value="${hru.hru_name}">${hru.Label} (${hru.hru_name})</option>`
+                ).join('');
+                
+                valueContainer.outerHTML = `
+                    <select class="form-control filter-value">
+                        <option value="">Select HRU...</option>
+                        ${hruOptions}
+                    </select>
+                `;
             }
         } else {
-            console.log('No geometry data detected');
-            // Clear the map if no geometry data
-            if (currentMapLayer) {
-                map.removeLayer(currentMapLayer);
-                currentMapLayer = null;
+            // Restore regular text input
+            if (valueContainer.tagName === 'SELECT') {
+                valueContainer.outerHTML = `<input type="text" class="form-control filter-value" placeholder="Value">`;
             }
         }
+    }
+
+    function generateQuery() {
+        const sourceUrl = geojsonSource.value.trim();
+        if (!sourceUrl) {
+            alert('Please enter a Parquet source URL');
+            return;
+        }
+
+        // Get selected columns
+        const selectedColumns = Array.from(columnSelector.selectedOptions).map(option => option.value);
+        let selectClause = selectedColumns.length > 0 ? selectedColumns.join(', ') : '*';
+        
+        // Always add datetime conversion column
+        const datetimeExpression = `${getCurrentStartTimeSQL()} + INTERVAL (ix) HOUR as datetime_col`;
+        if (selectClause === '*') {
+            selectClause = `*, ${datetimeExpression}`;
+        } else {
+            selectClause += `, ${datetimeExpression}`;
+        }
+
+        // Build WHERE clause
+        const filterRows = document.querySelectorAll('.filter-row');
+        let whereClause = '';
+        const conditions = [];
+        
+        filterRows.forEach((row, index) => {
+            const column = row.querySelector('.filter-column').value;
+            const operator = row.querySelector('.filter-operator').value;
+            const value = row.querySelector('.filter-value').value.trim();
+            const logic = row.querySelector('.filter-logic').value;
+            
+            if (column && value) {
+                let condition = `${column} ${operator} `;
+                if (operator === 'LIKE') {
+                    condition += `'%${value}%'`;
+                } else if (isNaN(value)) {
+                    condition += `'${value}'`;
+                } else {
+                    condition += value;
+                }
+                
+                if (conditions.length > 0) {
+                    condition = ` ${logic} ${condition}`;
+                }
+                conditions.push(condition);
+            }
+        });
+        
+        
+        if (conditions.length > 0) {
+            whereClause = ' WHERE ' + conditions.join('');
+        }
+
+        // Build GROUP BY clause
+        let groupByClause = '';
+        if (useGroupBy.checked && groupByColumn.value) {
+            groupByClause = ` GROUP BY ${groupByColumn.value}`;
+        }
+
+        // Build ORDER BY clause
+        let orderByClause = '';
+        if (orderByColumn.value) {
+            const direction = document.getElementById('orderby-direction').value;
+            orderByClause = ` ORDER BY ${orderByColumn.value} ${direction}`;
+        }
+
+        // Build LIMIT clause
+        let limitClause = '';
+        const limitValue = document.getElementById('limit-value').value;
+        if (limitValue) {
+            limitClause = ` LIMIT ${limitValue}`;
+        }
+
+        // Construct final query
+        const query = `SELECT ${selectClause} FROM '${sourceUrl}'${whereClause}${groupByClause}${orderByClause}${limitClause}`;
+        
+        // Set the query in the manual textarea and switch to manual mode
+        sqlQuery.value = query;
+        manualMode.checked = true;
+        toggleQueryMode();
     }
 
     // Function to substitute source URL in query templates
     function substituteSource(queryTemplate) {
         const sourceUrl = geojsonSource.value.trim();
         if (!sourceUrl) {
-            alert('Please enter a GeoJSON source URL');
+            alert('Please enter a Parquet source URL');
             return null;
         }
-        return queryTemplate.replace(/\{SOURCE\}/g, `'${sourceUrl}'`);
+        return queryTemplate.replace(/\{SOURCE\}/g, sourceUrl);
+    }
+
+    // Event listeners for new functionality
+    validateUrlButton.addEventListener('click', validateUrl);
+    
+    sampleDatasets.addEventListener('change', (e) => {
+        if (e.target.value) {
+            geojsonSource.value = e.target.value;
+            urlStatusSpan.textContent = '🔍';
+            schemaSection.style.display = 'block';
+        }
+    });
+    
+    getSchemaButton.addEventListener('click', getSchema);
+    
+    manualMode.addEventListener('change', toggleQueryMode);
+    builderMode.addEventListener('change', toggleQueryMode);
+    
+    generateQueryButton.addEventListener('click', generateQuery);
+    
+    addFilterButton.addEventListener('click', addFilterRow);
+    
+    useGroupBy.addEventListener('change', () => {
+        groupByColumn.disabled = !useGroupBy.checked;
+    });
+    
+
+    // Add remove functionality to initial filter row
+    document.querySelector('.remove-filter').addEventListener('click', (e) => {
+        e.target.closest('.filter-row').remove();
+    });
+
+    // Add HRU handling to the initial filter row
+    const initialColumnSelect = document.querySelector('.filter-column');
+    if (initialColumnSelect) {
+        initialColumnSelect.addEventListener('change', () => {
+            const valueContainer = initialColumnSelect.closest('.filter-row').querySelector('.filter-value');
+            updateFilterValueInput(initialColumnSelect, valueContainer);
+        });
     }
 
     // Event listeners for pre-defined query buttons
@@ -414,6 +602,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         executeButton.click();
     });
 
+    query4Button.addEventListener('click', () => {
+        const sourceUrl = geojsonSource.value.trim();
+        if (!sourceUrl) {
+            alert('Please enter a Parquet source URL first');
+            return;
+        }
+        const dynamicQuery = `SELECT ix, ${getCurrentStartTimeSQL()} + INTERVAL (ix) HOUR as datetime_col FROM '${sourceUrl}' LIMIT 10;`;
+        sqlQuery.value = dynamicQuery;
+        executeButton.click();
+    });
+
+    query5Button.addEventListener('click', () => {
+        sqlQuery.value = query5Button.dataset.query;
+        executeButton.click();
+    });
+
+    query6Button.addEventListener('click', () => {
+        sqlQuery.value = query6Button.dataset.query;
+        executeButton.click();
+    });
+
+    query7Button.addEventListener('click', () => {
+        sqlQuery.value = query7Button.dataset.query;
+        executeButton.click();
+    });
+
     executeButton.addEventListener('click', async () => {
         let query = sqlQuery.value;
         if (!query) {
@@ -425,10 +639,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (query.includes('{SOURCE}')) {
             const sourceUrl = geojsonSource.value.trim();
             if (!sourceUrl) {
-                alert('Please enter a GeoJSON source URL');
+                alert('Please enter a Parquet source URL');
                 return;
             }
-            query = query.replace(/\{SOURCE\}/g, `'${sourceUrl}'`);
+            query = query.replace(/\{SOURCE\}/g, sourceUrl);
         }
 
         try {
@@ -443,9 +657,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 sortDirection = 'asc';
                 currentPage = 1;
                 renderTable();
-                console.log('About to call updateMapData...');
-                updateMapData();
-                console.log('updateMapData called');
                 downloadCsvButton.style.display = 'block'; // Show the download button
             } else {
                 tableContainer.innerHTML = '<p>No results found.</p>';
@@ -465,18 +676,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        const allColumns = Object.keys(currentData[0]);
-        // Filter out geometry columns from table display
-        const columns = allColumns.filter(col => {
-            // Hide geometry, geom, and any column with WKT/GeoJSON data
-            if (col === 'geometry' || col === 'geom') return false;
-            
-            const sampleValue = currentData[0][col];
-            if (typeof sampleValue === 'string' && isWKT(sampleValue)) return false;
-            if (typeof sampleValue === 'object' && sampleValue instanceof Uint8Array) return false;
-            
-            return true;
-        });
+        const columns = Object.keys(currentData[0]);
 
         // Sort data
         let sortedData = [...currentData];

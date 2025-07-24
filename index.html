@@ -3,78 +3,226 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DuckDB WASM GeoJSON Query</title>
+    <title>DuckDB WASM Parquet Query</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous" />
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap" rel="stylesheet">
 </head>
 <body class="container mt-5">
     <header class="text-center mb-5">
-        <h1>Spatial GeoJSON Analysis with DuckDB WASM</h1>
+        <h1>Parquet Data Analysis with DuckDB WASM</h1>
     </header>
     <main>
         <section class="mb-4">
-            <p>Perform spatial analysis on remote GeoJSON files using SQL queries with DuckDB's spatial extension.</p>
+            <p>Analyze remote Parquet files using SQL queries with DuckDB WASM.</p>
             
-            <div class="mb-3">
-                <label for="geojson-source" class="form-label">GeoJSON Data Source</label>
-                <input type="text" id="geojson-source" class="form-control" 
-                       value="https://storage.googleapis.com/swhm-stac-data/vector/cig_grid_wgs/cig_grid_wgs.geojson"
-                       placeholder="Enter GeoJSON URL...">
-                <div class="form-text">Enter the URL of a remote GeoJSON file to analyze</div>
+            <!-- Data Source Management -->
+            <div class="mb-4">
+                <label class="form-label">Parquet Data Source</label>
+                <div class="input-group mb-2">
+                    <input type="text" id="geojson-source" class="form-control" 
+                           value="https://storage.googleapis.com/climate_ts/partitioned/model_name=WRF-NARR_HIS/grid_name=R10C29/data_0.parquet"
+                           placeholder="Enter Parquet URL...">
+                    <button id="validate-url" class="btn btn-outline-secondary" type="button">
+                        <span id="url-status">🔍</span> Validate
+                    </button>
+                </div>
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="form-text">Enter the URL of a remote Parquet file to analyze</div>
+                    </div>
+                    <div class="col-md-4">
+                        <select id="sample-datasets" class="form-select form-select-sm">
+                            <option value="">Sample Datasets...</option>
+                            <optgroup label="🚀 Partitioned Climate Data (Single Files)">
+                                <option value="https://storage.googleapis.com/climate_ts/partitioned/model_name=WRF-NARR_HIS/grid_name=R10C29/data_0.parquet">WRF-NARR_HIS R10C29</option>
+                                <option value="https://storage.googleapis.com/climate_ts/partitioned/model_name=WRF-NARR_HIS/grid_name=R10C30/data_0.parquet">WRF-NARR_HIS R10C30</option>
+                                <option value="https://storage.googleapis.com/climate_ts/partitioned/model_name=access1.3_RCP85_PREC_6km/grid_name=R10C29/data_0.parquet">Access1.3 RCP85 R10C29</option>
+                                <option value="https://storage.googleapis.com/climate_ts/partitioned/model_name=bcc-csm1.1_RCP85_PREC_6km/grid_name=R10C29/data_0.parquet">BCC-CSM1.1 RCP85 R10C29</option>
+                            </optgroup>
+                            <optgroup label="📁 Original Structure (Legacy)">
+                                <option value="https://storage.googleapis.com/climate_ts/WRF-NARR_HIS/results/R10C29/hru000.parquet">WRF-NARR_HIS Single HRU</option>
+                                <option value="https://storage.googleapis.com/climate_ts/access1.3_RCP85_PREC_6km/results/R10C29/hru000.parquet">Access1.3 RCP85 Single HRU</option>
+                            </optgroup>
+                            <optgroup label="🌐 Other Datasets">
+                                <option value="https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2023-01.parquet">NYC Taxi Data</option>
+                                <option value="https://huggingface.co/datasets/vivym/midjourney-messages/resolve/main/data/train-00000-of-00001-566cc9b19d7203f8.parquet">Midjourney Messages</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                </div>
             </div>
             
-            <div class="mb-3">
-                <label for="sql-query" class="form-label">SQL Query</label>
-                <textarea id="sql-query" class="form-control" rows="6" placeholder="WITH datasource AS (SELECT * FROM ST_Read({SOURCE})) SELECT grid_id, lat_vector, lon_vector, ST_Area(geom) as area_sq_degrees, ST_AsGeoJSON(geom) as geometry FROM datasource ORDER BY area_sq_degrees DESC LIMIT 10;"></textarea>
-                <div class="form-text">Use {SOURCE} as placeholder for the GeoJSON URL</div>
+            <!-- Schema Viewer -->
+            <div class="mb-4" id="schema-section" style="display: none;">
+                <h6>Schema Information</h6>
+                <div id="schema-container" class="card">
+                    <div class="card-body">
+                        <div id="schema-content">Click "Get Schema" to load column information</div>
+                    </div>
+                </div>
+                <button id="get-schema" class="btn btn-outline-info btn-sm mt-2">Get Schema</button>
+            </div>
+
+            <!-- Query Builder Interface -->
+            <div class="mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <label class="form-label mb-0">SQL Query</label>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <input type="radio" class="btn-check" name="query-mode" id="manual-mode" checked>
+                        <label class="btn btn-outline-primary" for="manual-mode">Manual SQL</label>
+                        <input type="radio" class="btn-check" name="query-mode" id="builder-mode">
+                        <label class="btn btn-outline-primary" for="builder-mode">Query Builder</label>
+                    </div>
+                </div>
+
+                <!-- Manual SQL Mode -->
+                <div id="manual-query-section">
+                    <textarea id="sql-query" class="form-control" rows="6" placeholder="SELECT * FROM '{SOURCE}' LIMIT 10;"></textarea>
+                    <div class="form-text">Use {SOURCE} as placeholder for the Parquet URL</div>
+                </div>
+
+                <!-- Query Builder Mode -->
+                <div id="query-builder-section" style="display: none;">
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Select Columns</label>
+                                    <select id="column-selector" class="form-select" multiple size="4">
+                                        <option value="*">* (All Columns)</option>
+                                    </select>
+                                    <div class="form-text">Hold Ctrl/Cmd to select multiple columns</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Aggregation Functions</label>
+                                    <div id="aggregation-controls">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="use-groupby">
+                                            <label class="form-check-label" for="use-groupby">Use GROUP BY</label>
+                                        </div>
+                                        <select id="groupby-column" class="form-select form-select-sm mt-2" disabled>
+                                            <option value="">Select column to group by</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Filters (WHERE clause)</label>
+                                <div id="filter-builder">
+                                    <div class="filter-row mb-2">
+                                        <div class="row g-2">
+                                            <div class="col-md-3">
+                                                <select class="form-select filter-column">
+                                                    <option value="">Select column...</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <select class="form-select filter-operator">
+                                                    <option value="=">=</option>
+                                                    <option value="!=">!=</option>
+                                                    <option value=">">></option>
+                                                    <option value="<"><</option>
+                                                    <option value=">=">>=</option>
+                                                    <option value="<="><=</option>
+                                                    <option value="LIKE">LIKE</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <input type="text" class="form-control filter-value" placeholder="Value">
+                                            </div>
+                                            <div class="col-md-2">
+                                                <select class="form-select filter-logic">
+                                                    <option value="AND">AND</option>
+                                                    <option value="OR">OR</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <button type="button" class="btn btn-outline-danger btn-sm remove-filter">Remove</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="button" id="add-filter" class="btn btn-outline-secondary btn-sm">Add Filter</button>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">ORDER BY</label>
+                                    <div class="input-group">
+                                        <select id="orderby-column" class="form-select">
+                                            <option value="">Select column...</option>
+                                        </select>
+                                        <select id="orderby-direction" class="form-select" style="max-width: 100px;">
+                                            <option value="ASC">ASC</option>
+                                            <option value="DESC">DESC</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">LIMIT</label>
+                                    <input type="number" id="limit-value" class="form-control" placeholder="e.g., 100" min="1">
+                                </div>
+                            </div>
+                            
+                            <button type="button" id="generate-query" class="btn btn-success">Generate SQL Query</button>
+                        </div>
+                    </div>
+                </div>
             </div>
             
             <div class="mb-3">
                 <button id="execute-button" class="btn btn-primary" disabled>Execute Query</button>
-                <div class="btn-group ms-2" role="group" aria-label="Example queries">
-                    <button id="query1-button" class="btn btn-outline-info" data-query="WITH datasource AS (SELECT * FROM ST_Read({SOURCE})) SELECT grid_id, lat_vector, lon_vector, ST_Area(geom) as area_sq_degrees, ST_AsGeoJSON(geom) as geometry FROM datasource ORDER BY area_sq_degrees DESC LIMIT 10;">Largest Grid Cells</button>
-                    <button id="query2-button" class="btn btn-outline-info" data-query="WITH datasource AS (SELECT * FROM ST_Read({SOURCE})) SELECT grid_id, ghs_vector, ST_AsText(ST_Centroid(geom)) as centroid FROM datasource WHERE lat_vector BETWEEN 48.0 AND 49.0 LIMIT 10;">Grid Centroids</button>
-                    <button id="query3-button" class="btn btn-outline-info" data-query="WITH datasource AS (SELECT * FROM ST_Read({SOURCE})) SELECT grid_id, lat_vector, lon_vector, ST_AsGeoJSON(geom) as geometry FROM datasource WHERE ST_Within(geom, ST_MakeEnvelope(-123, 48, -121, 49)) ORDER BY grid_id LIMIT 15;">Bounding Box Filter</button>
+                <div class="btn-group ms-2" role="group" aria-label="Basic queries">
+                    <button id="query1-button" class="btn btn-outline-info" data-query="SELECT * FROM '{SOURCE}' LIMIT 10;">First 10 Rows</button>
+                    <button id="query2-button" class="btn btn-outline-info" data-query="SELECT COUNT(*) as record_count FROM '{SOURCE}';">Count Records</button>
+                    <button id="query3-button" class="btn btn-outline-info" data-query="DESCRIBE SELECT * FROM '{SOURCE}';">Column Info</button>
+                    <button id="query4-button" class="btn btn-outline-warning" data-query="">DateTime Convert</button>
+                </div>
+                <div class="btn-group ms-2 mt-2" role="group" aria-label="Climate data queries">
+                    <button id="query5-button" class="btn btn-outline-success" data-query="SELECT COUNT(*) as total_records, MIN(ix) as min_time, MAX(ix) as max_time FROM '{SOURCE}';">Data Summary</button>
+                    <button id="query6-button" class="btn btn-outline-success" data-query="SELECT AVG(ix) as avg_time_index, COUNT(*) as records FROM '{SOURCE}';">Time Stats</button>
+                    <button id="query7-button" class="btn btn-outline-success" data-query="SELECT ix, COUNT(*) as frequency FROM '{SOURCE}' GROUP BY ix ORDER BY frequency DESC LIMIT 10;">Time Frequency</button>
                 </div>
             </div>
             <div id="status-message" class="mt-2 text-muted">Initializing DuckDB...</div>
             
-            <!-- Spatial Functions Reference -->
+            <!-- SQL Functions Reference -->
             <div class="mt-4">
-                <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#spatial-reference" aria-expanded="false" aria-controls="spatial-reference">
-                    📍 Spatial Functions Reference
+                <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#sql-reference" aria-expanded="false" aria-controls="sql-reference">
+                    📊 SQL Functions Reference
                 </button>
-                <div class="collapse mt-3" id="spatial-reference">
+                <div class="collapse mt-3" id="sql-reference">
                     <div class="card card-body">
-                        <h6>Common Spatial Functions:</h6>
+                        <h6>Common SQL Functions:</h6>
                         <ul class="small">
-                            <li><code>ST_Read('url')</code> - Read spatial data directly from GeoJSON, Shapefile, etc.</li>
-                            <li><code>ST_Area(geom)</code> - Calculate area of geometry</li>
-                            <li><code>ST_Centroid(geom)</code> - Find centroid of geometry</li>
-                            <li><code>ST_AsText(geom)</code> - Convert geometry to Well-Known Text (WKT)</li>
-                            <li><code>ST_Within(geom1, geom2)</code> - Test if geom1 is within geom2</li>
-                            <li><code>ST_MakeEnvelope(xmin, ymin, xmax, ymax)</code> - Create bounding box</li>
-                            <li><code>ST_Distance(geom1, geom2)</code> - Calculate distance between geometries</li>
-                            <li><code>ST_GeomFromGeoJSON(json)</code> - Convert GeoJSON geometry to DuckDB geometry</li>
+                            <li><code>SELECT * FROM 'url'</code> - Read data directly from Parquet URL</li>
+                            <li><code>COUNT(*)</code> - Count total number of records</li>
+                            <li><code>DESCRIBE SELECT * FROM 'url'</code> - Show column information</li>
+                            <li><code>WHERE column = value</code> - Filter records</li>
+                            <li><code>ORDER BY column DESC</code> - Sort results</li>
+                            <li><code>GROUP BY column</code> - Group data for aggregation</li>
+                            <li><code>LIMIT n</code> - Limit number of results</li>
                         </ul>
-                        <small class="text-muted">Note: Spatial functions require the spatial extension to be loaded.</small>
+                        <h6 class="mt-3">Partitioned Data Benefits:</h6>
+                        <ul class="small">
+                            <li><strong>Partition Pruning:</strong> Query only specific models/grids with <code>WHERE model_name = 'WRF-NARR_HIS'</code></li>
+                            <li><strong>Cross-Model Analysis:</strong> Compare models easily with <code>GROUP BY model_name</code></li>
+                            <li><strong>Efficient Filtering:</strong> DuckDB automatically skips irrelevant files when filtering by partition columns</li>
+                            <li><strong>Standardized Schema:</strong> All files have consistent <code>model_name</code>, <code>grid_name</code> metadata columns</li>
+                            <li><strong>URL Pattern:</strong> Use URL encoding: <code>model_name%3DWRF-NARR_HIS</code> for <code>model_name=WRF-NARR_HIS</code></li>
+                        </ul>
                     </div>
                 </div>
             </div>
         </section>
         <section id="results-container">
-            <div class="row">
-                <div id="table-panel" class="col-md-6">
-                    <h5>Query Results</h5>
-                    <div id="table-container" style="overflow-x: auto;"></div>
-                    <button id="download-csv-button" class="btn btn-success mt-3" style="display: none;">Download CSV</button>
-                </div>
-                <div id="map-panel" class="col-md-6">
-                    <h5>Map Visualization</h5>
-                    <div id="map-container" style="height: 500px; width: 100%;"></div>
-                </div>
+            <div id="table-panel" class="col-12">
+                <h5>Query Results</h5>
+                <div id="table-container" style="overflow-x: auto;"></div>
+                <button id="download-csv-button" class="btn btn-success mt-3" style="display: none;">Download CSV</button>
             </div>
         </section>
     </main>
@@ -86,7 +234,6 @@
     window.duckdb = duckdb;
 </script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
     <script type="module" src="script.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
 </body>

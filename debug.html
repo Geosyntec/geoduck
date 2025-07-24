@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Partitioned Data Debugging - DuckDB WASM</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <style>
+        .query-result { 
+            background: #f8f9fa; 
+            border: 1px solid #dee2e6; 
+            padding: 10px; 
+            margin: 10px 0; 
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .error { 
+            background: #f8d7da; 
+            border-color: #f5c6cb; 
+            color: #721c24;
+        }
+        .success { 
+            background: #d4edda; 
+            border-color: #c3e6cb; 
+            color: #155724;
+        }
+        .test-section {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body class="container mt-4">
+    <header class="text-center mb-4">
+        <h1>🐛 Partitioned Data Debugging</h1>
+        <p class="text-muted">Testing Hive partitioning with DuckDB WASM</p>
+    </header>
+
+    <div id="init-status" class="alert alert-info">
+        🔄 Initializing DuckDB WASM...
+    </div>
+
+
+    <div class="test-section">
+        <h3>Test 1: ✅ Direct File Access</h3>
+        <p><small class="text-success">Direct file access works perfectly</small></p>
+        <button id="test1" class="btn btn-success">Run Test 1</button>
+        <div id="result1" class="query-result" style="display: none;"></div>
+        <details>
+            <summary>Query</summary>
+            <code>SELECT * FROM read_parquet('https://storage.googleapis.com/climate_ts/partitioned/model_name=WRF-NARR_HIS/grid_name=R10C29/data_0.parquet') LIMIT 3;</code>
+        </details>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 2: ✅ Manual Partition Columns</h3>
+        <p><small class="text-success">Manually add partition info to single file</small></p>
+        <button id="test2" class="btn btn-success">Run Test 2</button>
+        <div id="result2" class="query-result" style="display: none;"></div>
+        <details>
+            <summary>Query</summary>
+            <code>SELECT 'WRF-NARR_HIS' as model_name, 'R10C29' as grid_name, * FROM read_parquet('https://storage.googleapis.com/climate_ts/partitioned/model_name=WRF-NARR_HIS/grid_name=R10C29/data_0.parquet') LIMIT 2;</code>
+        </details>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 3: ✅ Array of URLs</h3>
+        <p><small class="text-success">Test if DuckDB can read from an array of specific URLs</small></p>
+        <button id="test3" class="btn btn-success">Run Test 3</button>
+        <div id="result3" class="query-result" style="display: none;"></div>
+        <details>
+            <summary>Query</summary>
+            <code>SELECT * FROM read_parquet(['https://storage.googleapis.com/climate_ts/partitioned/model_name=WRF-NARR_HIS/grid_name=R10C29/data_0.parquet']) LIMIT 3;</code>
+        </details>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 4: ✅ Multiple Files with UNION</h3>
+        <p><small class="text-success">Manually combine files from different partitions</small></p>
+        <button id="test4" class="btn btn-success">Run Test 4</button>
+        <div id="result4" class="query-result" style="display: none;"></div>
+        <details>
+            <summary>Query</summary>
+            <code>SELECT 'WRF-NARR_HIS' as model_name, 'R10C29' as grid_name, * FROM read_parquet('https://storage.googleapis.com/climate_ts/partitioned/model_name=WRF-NARR_HIS/grid_name=R10C29/data_0.parquet') LIMIT 2 
+UNION ALL 
+SELECT 'WRF-NARR_HIS' as model_name, 'R10C30' as grid_name, * FROM read_parquet('https://storage.googleapis.com/climate_ts/partitioned/model_name=WRF-NARR_HIS/grid_name=R10C30/data_0.parquet') LIMIT 2;</code>
+        </details>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 5: ✅ Different Climate Model</h3>
+        <p><small class="text-success">Test accessing a different climate model partition</small></p>
+        <button id="test5" class="btn btn-success">Run Test 5</button>
+        <div id="result5" class="query-result" style="display: none;"></div>
+        <details>
+            <summary>Query</summary>
+            <code>SELECT * FROM read_parquet('https://storage.googleapis.com/climate_ts/partitioned/model_name=access1.3_RCP85_PREC_6km/grid_name=R10C29/data_0.parquet') LIMIT 3;</code>
+        </details>
+    </div>
+
+    <div class="mt-4">
+        <h4>Debug Info</h4>
+        <div id="debug-info" class="query-result">
+            <strong>Expected Partition Structure:</strong><br>
+            climate_ts/partitioned/model_name=WRF-NARR_HIS/grid_name=R10C29/data_0.parquet<br>
+            climate_ts/partitioned/model_name=access1.3_RCP85_PREC_6km/grid_name=R10C29/data_0.parquet<br><br>
+            <strong>Key Points:</strong><br>
+            • Uses Hive partitioning (key=value in folder names)<br>
+            • DuckDB should auto-detect partition columns<br>
+            • Filter pushdown should work on partition columns<br>
+            • Partition columns: model_name, grid_name
+        </div>
+    </div>
+
+    <script type="module">
+        import * as duckdb from 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.28.1-dev106.0/+esm';
+        
+        let db;
+        
+        async function initDuckDB() {
+            try {
+                const initStatus = document.getElementById('init-status');
+                initStatus.textContent = '🔄 Loading DuckDB bundles...';
+                
+                const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
+                const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES);
+                
+                initStatus.textContent = '🔄 Creating worker...';
+                const worker = await duckdb.createWorker(bundle.mainWorker);
+                
+                initStatus.textContent = '🔄 Starting DuckDB...';
+                const logger = new duckdb.ConsoleLogger();
+                db = new duckdb.AsyncDuckDB(logger, worker);
+                await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+                
+                initStatus.className = 'alert alert-success';
+                initStatus.textContent = '✅ DuckDB WASM initialized successfully!';
+                
+                // Enable test buttons
+                document.querySelectorAll('button[id^="test"]').forEach(btn => btn.disabled = false);
+                
+            } catch (error) {
+                const initStatus = document.getElementById('init-status');
+                initStatus.className = 'alert alert-danger';
+                initStatus.textContent = `❌ Failed to initialize DuckDB: ${error.message}`;
+                console.error('DuckDB init error:', error);
+            }
+        }
+        
+        async function runQuery(query, resultElementId) {
+            const resultElement = document.getElementById(resultElementId);
+            resultElement.style.display = 'block';
+            resultElement.textContent = '🔄 Running query...';
+            resultElement.className = 'query-result';
+            
+            try {
+                const conn = await db.connect();
+                const startTime = performance.now();
+                const result = await conn.query(query);
+                const endTime = performance.now();
+                
+                const data = result.toArray().map(row => row.toJSON());
+                
+                let output = `✅ Query completed in ${(endTime - startTime).toFixed(2)}ms\n`;
+                output += `📊 Rows returned: ${data.length}\n\n`;
+                
+                if (data.length > 0) {
+                    output += `📋 Sample Data:\n`;
+                    output += JSON.stringify(data, null, 2);
+                } else {
+                    output += '📋 No data returned';
+                }
+                
+                resultElement.textContent = output;
+                resultElement.className = 'query-result success';
+                
+                conn.close();
+                
+            } catch (error) {
+                resultElement.textContent = `❌ Query failed:\n${error.message}\n\nFull error:\n${error.toString()}`;
+                resultElement.className = 'query-result error';
+                console.error('Query error:', error);
+            }
+        }
+        
+        // Test queries
+        const tests = {
+            test1: "SELECT * FROM read_parquet('https://storage.googleapis.com/climate_ts/partitioned/model_name=WRF-NARR_HIS/grid_name=R10C29/data_0.parquet') LIMIT 3;",
+            test2: "SELECT 'WRF-NARR_HIS' as model_name, 'R10C29' as grid_name, * FROM read_parquet('https://storage.googleapis.com/climate_ts/partitioned/model_name=WRF-NARR_HIS/grid_name=R10C29/data_0.parquet') LIMIT 2;",
+            test3: "SELECT * FROM read_parquet(['https://storage.googleapis.com/climate_ts/partitioned/model_name=WRF-NARR_HIS/grid_name=R10C29/data_0.parquet']) LIMIT 3;",
+            test4: "SELECT 'WRF-NARR_HIS' as model_name, 'R10C29' as grid_name, * FROM read_parquet('https://storage.googleapis.com/climate_ts/partitioned/model_name=WRF-NARR_HIS/grid_name=R10C29/data_0.parquet') LIMIT 2 UNION ALL SELECT 'WRF-NARR_HIS' as model_name, 'R10C30' as grid_name, * FROM read_parquet('https://storage.googleapis.com/climate_ts/partitioned/model_name=WRF-NARR_HIS/grid_name=R10C30/data_0.parquet') LIMIT 2;",
+            test5: "SELECT * FROM read_parquet('https://storage.googleapis.com/climate_ts/partitioned/model_name=access1.3_RCP85_PREC_6km/grid_name=R10C29/data_0.parquet') LIMIT 3;"
+        };
+        
+        // Set up event listeners
+        Object.keys(tests).forEach(testId => {
+            document.getElementById(testId).addEventListener('click', () => {
+                runQuery(tests[testId], `result${testId.slice(-1)}`);
+            });
+        });
+        
+        // Disable buttons initially
+        document.querySelectorAll('button[id^="test"]').forEach(btn => btn.disabled = true);
+        
+        // Initialize DuckDB
+        initDuckDB();
+    </script>
+</body>
+</html>

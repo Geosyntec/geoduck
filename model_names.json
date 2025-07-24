@@ -1,0 +1,16 @@
+{
+  "model_names": [
+    "access1.3_RCP85_PREC_6km",
+    "bcc-csm1.1_RCP85_PREC_6km",
+    "canesm2_RCP85_PREC_6km",
+    "ccsm4_RCP85_PREC_6km",
+    "csiro-mk3.6.0_RCP85_PREC_6km",
+    "fgoals-g2_RCP85_PREC_6km",
+    "gfdl-cm3_RCP85_PREC_6km",
+    "giss-e2-h_RCP85_PREC_6km",
+    "miroc5_RCP85_PREC_6km",
+    "mri-cgcm3_RCP85_PREC_6km",
+    "noresm1-m_RCP85_PREC_6km",
+    "WRF-NARR_HIS"
+  ]
+}
