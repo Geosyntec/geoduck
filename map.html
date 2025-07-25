@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DuckDB WASM GeoJSON Query</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous" />
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap" rel="stylesheet">
+</head>
+<body class="container mt-5">
+    <header class="text-center mb-5 position-relative">
+        <h1>Spatial GeoJSON Analysis with DuckDB WASM</h1>
+        <nav class="mt-3">
+            <div class="btn-group" role="group" aria-label="Navigation">
+                <a href="index.html" class="btn btn-outline-primary">← Data Analysis</a>
+                <a href="map.html" class="btn btn-primary">Spatial Map</a>
+                <a href="partition_ui.html" class="btn btn-outline-primary">Partition UI</a>
+                <a href="debug.html" class="btn btn-outline-secondary">Debug</a>
+            </div>
+        </nav>
+        <button id="theme-toggle" class="btn btn-outline-secondary position-absolute top-0 end-0" 
+                title="Toggle theme" style="border-radius: 50%; width: 40px; height: 40px;">
+            🌙
+        </button>
+    </header>
+    <main>
+        <section class="mb-4">
+            <p>Perform spatial analysis on remote GeoJSON files using SQL queries with DuckDB's spatial extension.</p>
+            
+            <div class="mb-3">
+                <label for="geojson-source" class="form-label">GeoJSON Data Source</label>
+                <input type="text" id="geojson-source" class="form-control" 
+                       value="https://storage.googleapis.com/swhm-stac-data/vector/cig_grid_wgs/cig_grid_wgs.geojson"
+                       placeholder="Enter GeoJSON URL...">
+                <div class="form-text">Enter the URL of a remote GeoJSON file to analyze</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="address-search" class="form-label">Find address or place</label>
+                <div class="input-group position-relative">
+                    <input type="text" id="address-search" class="form-control" 
+                           placeholder="Enter address, city, or place name..." autocomplete="off">
+                    <button id="search-button" class="btn btn-outline-secondary" type="button">Search</button>
+                    <div id="suggestions-dropdown" class="suggestions-dropdown"></div>
+                </div>
+                <div class="form-text">Search for a location to center the map and get coordinates</div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="sql-query" class="form-label">SQL Query</label>
+                <textarea id="sql-query" class="form-control" rows="6" placeholder="WITH datasource AS (SELECT * FROM ST_Read({SOURCE})) SELECT grid_id, lat_vector, lon_vector, ST_Area(geom) as area_sq_degrees, ST_AsGeoJSON(geom) as geometry FROM datasource ORDER BY area_sq_degrees DESC LIMIT 10;"></textarea>
+                <div class="form-text">Use {SOURCE} as placeholder for the GeoJSON URL</div>
+            </div>
+            
+            <div class="mb-3">
+                <button id="execute-button" class="btn btn-primary" disabled>Execute Query</button>
+                <div class="btn-group ms-2" role="group" aria-label="Example queries">
+                    <button id="query1-button" class="btn btn-outline-info" data-query="WITH datasource AS (SELECT * FROM ST_Read({SOURCE})) SELECT grid_id, lat_vector, lon_vector, ST_Area(geom) as area_sq_degrees, ST_AsGeoJSON(geom) as geometry FROM datasource ORDER BY area_sq_degrees DESC LIMIT 10;">Largest Grid Cells</button>
+                    <button id="query2-button" class="btn btn-outline-info" data-query="WITH datasource AS (SELECT * FROM ST_Read({SOURCE})) SELECT grid_id, ghs_vector, ST_AsText(ST_Centroid(geom)) as centroid FROM datasource WHERE lat_vector BETWEEN 48.0 AND 49.0 LIMIT 10;">Grid Centroids</button>
+                    <button id="query3-button" class="btn btn-outline-info" data-query="WITH datasource AS (SELECT * FROM ST_Read({SOURCE})) SELECT grid_id, lat_vector, lon_vector, ST_AsGeoJSON(geom) as geometry FROM datasource WHERE ST_Within(geom, ST_MakeEnvelope(-123, 48, -121, 49)) ORDER BY grid_id LIMIT 15;">Bounding Box Filter</button>
+                </div>
+            </div>
+            <div id="status-message" class="mt-2 text-muted">Initializing DuckDB...</div>
+            
+            <!-- Spatial Functions Reference -->
+            <div class="mt-4">
+                <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#spatial-reference" aria-expanded="false" aria-controls="spatial-reference">
+                    📍 Spatial Functions Reference
+                </button>
+                <div class="collapse mt-3" id="spatial-reference">
+                    <div class="card card-body">
+                        <h6>Common Spatial Functions:</h6>
+                        <ul class="small">
+                            <li><code>ST_Read('url')</code> - Read spatial data directly from GeoJSON, Shapefile, etc.</li>
+                            <li><code>ST_Area(geom)</code> - Calculate area of geometry</li>
+                            <li><code>ST_Centroid(geom)</code> - Find centroid of geometry</li>
+                            <li><code>ST_AsText(geom)</code> - Convert geometry to Well-Known Text (WKT)</li>
+                            <li><code>ST_Within(geom1, geom2)</code> - Test if geom1 is within geom2</li>
+                            <li><code>ST_MakeEnvelope(xmin, ymin, xmax, ymax)</code> - Create bounding box</li>
+                            <li><code>ST_Distance(geom1, geom2)</code> - Calculate distance between geometries</li>
+                            <li><code>ST_GeomFromGeoJSON(json)</code> - Convert GeoJSON geometry to DuckDB geometry</li>
+                        </ul>
+                        <small class="text-muted">Note: Spatial functions require the spatial extension to be loaded.</small>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section id="results-container">
+            <div class="row">
+                <div id="table-panel" class="col-md-6">
+                    <h5>Query Results</h5>
+                    <div id="table-container" style="overflow-x: auto;"></div>
+                    <button id="download-csv-button" class="btn btn-success mt-3" style="display: none;">Download CSV</button>
+                </div>
+                <div id="map-panel" class="col-md-6">
+                    <h5>Map Visualization</h5>
+                    <div id="map-container" style="height: 500px; width: 100%;"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <footer class="text-center mt-5">
+        <p> Copyright 2025 Geosyntec Consultants</p>
+    </footer>
+    <script type="module">
+    import * as duckdb from 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.28.1-dev106.0/+esm';
+    window.duckdb = duckdb;
+</script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+    <script type="module" src="map.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+</body>
+</html>

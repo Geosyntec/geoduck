@@ -1,112 +1,357 @@
+/* Theme Variables */
+:root {
+  /* Light Theme */
+  --bg-primary-light: #ffffff;
+  --bg-secondary-light: #f8f9fa;
+  --bg-tertiary-light: #e9ecef;
+  --text-primary-light: #212529;
+  --text-secondary-light: #6c757d;
+  --accent-primary-light: #0d6efd;
+  --accent-secondary-light: #198754;
+  --border-color-light: #dee2e6;
+  --success-color-light: #198754;
+  --warning-color-light: #fd7e14;
+  --card-bg-light: #ffffff;
+  --input-bg-light: #ffffff;
+  --input-border-light: #ced4da;
+  
+  /* Dark Theme */
+  --bg-primary-dark: #1a1d23;
+  --bg-secondary-dark: #242933;
+  --bg-tertiary-dark: #2d3748;
+  --text-primary-dark: #e2e8f0;
+  --text-secondary-dark: #a0aec0;
+  --accent-primary-dark: #4299e1;
+  --accent-secondary-dark: #68d391;
+  --border-color-dark: #4a5568;
+  --success-color-dark: #38a169;
+  --warning-color-dark: #ed8936;
+  --card-bg-dark: #242933;
+  --input-bg-dark: #2d3748;
+  --input-border-dark: #4a5568;
+  
+  /* Default to light theme */
+  --bg-primary: var(--bg-primary-light);
+  --bg-secondary: var(--bg-secondary-light);
+  --bg-tertiary: var(--bg-tertiary-light);
+  --text-primary: var(--text-primary-light);
+  --text-secondary: var(--text-secondary-light);
+  --accent-primary: var(--accent-primary-light);
+  --accent-secondary: var(--accent-secondary-light);
+  --border-color: var(--border-color-light);
+  --success-color: var(--success-color-light);
+  --warning-color: var(--warning-color-light);
+  --card-bg: var(--card-bg-light);
+  --input-bg: var(--input-bg-light);
+  --input-border: var(--input-border-light);
+}
+
+/* Dark theme class */
+[data-theme="dark"] {
+  --bg-primary: var(--bg-primary-dark);
+  --bg-secondary: var(--bg-secondary-dark);
+  --bg-tertiary: var(--bg-tertiary-dark);
+  --text-primary: var(--text-primary-dark);
+  --text-secondary: var(--text-secondary-dark);
+  --accent-primary: var(--accent-primary-dark);
+  --accent-secondary: var(--accent-secondary-dark);
+  --border-color: var(--border-color-dark);
+  --success-color: var(--success-color-dark);
+  --warning-color: var(--warning-color-dark);
+  --card-bg: var(--card-bg-dark);
+  --input-bg: var(--input-bg-dark);
+  --input-border: var(--input-border-dark);
+}
+
+/* Global theme styles */
+body {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Header styles */
+header h1 {
+  color: var(--text-primary);
+}
+
+/* Theme toggle button */
+#theme-toggle {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+  transition: all 0.3s ease;
+}
+
+#theme-toggle:hover {
+  background-color: var(--bg-tertiary) !important;
+  border-color: var(--accent-primary) !important;
+}
+
+/* Form controls */
+.form-control {
+  background-color: var(--input-bg) !important;
+  border-color: var(--input-border) !important;
+  color: var(--text-primary) !important;
+}
+
+.form-control:focus {
+  background-color: var(--input-bg) !important;
+  border-color: var(--accent-primary) !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 0 0 0.2rem rgba(66, 153, 225, 0.25) !important;
+}
+
+.form-label {
+  color: var(--text-primary) !important;
+  font-weight: 600;
+}
+
+.form-text {
+  color: var(--text-secondary) !important;
+  font-size: 0.85em;
+}
+
+/* Buttons */
+.btn-primary {
+  background-color: var(--accent-primary) !important;
+  border-color: var(--accent-primary) !important;
+}
+
+.btn-success {
+  background-color: var(--success-color) !important;
+  border-color: var(--success-color) !important;
+}
+
+.btn-outline-info {
+  color: var(--accent-primary) !important;
+  border-color: var(--accent-primary) !important;
+}
+
+.btn-outline-info:hover {
+  background-color: var(--accent-primary) !important;
+  border-color: var(--accent-primary) !important;
+}
+
+.btn-outline-secondary {
+  color: var(--text-secondary) !important;
+  border-color: var(--border-color) !important;
+}
+
+.btn-outline-secondary:hover {
+  background-color: var(--bg-tertiary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Cards and collapsible content */
+.card {
+  background-color: var(--card-bg) !important;
+  border-color: var(--border-color) !important;
+}
+
+.card-body {
+  background-color: var(--card-bg) !important;
+  color: var(--text-primary) !important;
+}
+
 /* Custom table styles */
 .table {
-    font-family: 'Roboto Mono', 'Courier New', Courier, monospace;
-    font-size: 0.85em; /* Slightly smaller font for split view */
+  font-family: 'Roboto Mono', 'Courier New', Courier, monospace;
+  font-size: 0.85em;
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
 }
 
 .table thead th {
-    background-color: #e9ecef; /* Slightly darker grey for header */
-    font-size: 0.8em; /* Smaller header text */
-    padding: 0.5rem; /* Reduce padding */
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+  font-size: 0.8em;
+  padding: 0.5rem;
 }
 
 .table tbody td {
-    padding: 0.4rem; /* Reduce cell padding */
-    word-break: break-word; /* Allow text wrapping */
-    max-width: 150px; /* Limit column width */
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+  padding: 0.4rem;
+  word-break: break-word;
+  max-width: 150px;
 }
 
-/* Ensure table container doesn't overflow */
+.table-striped tbody tr:nth-of-type(odd) td {
+  background-color: var(--bg-tertiary) !important;
+}
+
+.table-hover tbody tr:hover td {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Table container */
 #table-container {
-    max-width: 100%;
-    overflow-x: auto;
+  max-width: 100%;
+  overflow-x: auto;
+  background-color: var(--bg-secondary);
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-color);
 }
-
-/* Responsive table styling */
-.table-responsive {
-    border: none;
-}
-
-/* Bootstrap's table-striped class already provides alternating row colors. */
-/* If you want to customize the stripe color, you can override it here. */
-/* For example: */
-/*
-.table-striped tbody tr:nth-of-type(odd) {
-    background-color: #f8f9fa; 
-}
-*/
 
 /* Map styles */
 #map-container {
-    border: 1px solid #dee2e6;
-    border-radius: 0.375rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.375rem;
+  background-color: var(--bg-secondary);
 }
 
 .view-controls {
-    display: flex;
-    justify-content: center;
-}
-
-.popup-content {
-    font-size: 0.9em;
-    max-width: 200px;
-}
-
-.popup-content strong {
-    color: #495057;
-}
-
-/* Responsive adjustments for split view */
-@media (max-width: 768px) {
-    #table-panel, #map-panel {
-        margin-bottom: 2rem;
-    }
-    
-    .table {
-        font-size: 0.75em; /* Even smaller on mobile */
-    }
-    
-    .table tbody td {
-        max-width: 100px; /* Smaller column width on mobile */
-        padding: 0.3rem;
-    }
-    
-    #map-container {
-        height: 400px; /* Smaller map on mobile */
-    }
+  display: flex;
+  justify-content: center;
 }
 
 /* Section headers */
 #table-panel h5, #map-panel h5 {
-    color: #495057;
-    border-bottom: 2px solid #dee2e6;
-    padding-bottom: 0.5rem;
-    margin-bottom: 1rem;
+  color: var(--text-primary) !important;
+  border-bottom: 2px solid var(--border-color);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
 }
 
-/* Form styling improvements */
-.form-label {
-    font-weight: 600;
-    color: #495057;
-}
-
-#geojson-source {
-    font-family: 'Roboto Mono', monospace;
-    font-size: 0.9em;
-}
-
-.form-text {
-    font-size: 0.85em;
-}
-
-/* Example query buttons */
-.btn-group .btn {
-    font-size: 0.85em;
-    padding: 0.375rem 0.75rem;
+/* Status message */
+#status-message {
+  color: var(--text-secondary) !important;
 }
 
 /* Query input styling */
 #sql-query {
-    font-family: 'Roboto Mono', monospace;
-    font-size: 0.9em;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.9em;
+}
+
+#geojson-source {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.9em;
+}
+
+/* Example query buttons */
+.btn-group .btn {
+  font-size: 0.85em;
+  padding: 0.375rem 0.75rem;
+}
+
+/* Footer */
+footer p {
+  color: var(--text-secondary) !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  #table-panel, #map-panel {
+    margin-bottom: 2rem;
+  }
+  
+  .table {
+    font-size: 0.75em;
+  }
+  
+  .table tbody td {
+    max-width: 100px;
+    padding: 0.3rem;
+  }
+  
+  #map-container {
+    height: 400px;
+  }
+  
+  #theme-toggle {
+    position: relative !important;
+    top: auto !important;
+    right: auto !important;
+    margin: 1rem auto;
+    display: block;
+  }
+}
+
+/* Smooth transitions for theme changes */
+* {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+/* Ensure Bootstrap components inherit theme colors */
+.input-group-text {
+  background-color: var(--bg-tertiary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Popup styles for Leaflet */
+.leaflet-popup-content-wrapper {
+  background-color: var(--card-bg) !important;
+  color: var(--text-primary) !important;
+}
+
+.leaflet-popup-tip {
+  background-color: var(--card-bg) !important;
+}
+
+/* Simple autocomplete suggestions dropdown */
+.suggestions-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  max-height: 200px;
+  overflow-y: auto;
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-top: none;
+  border-radius: 0 0 0.5rem 0.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  display: none;
+}
+
+.suggestion-item {
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  background-color: var(--card-bg);
+  transition: background-color 0.2s ease;
+}
+
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.suggestion-item:hover,
+.suggestion-item.highlighted {
+  background-color: var(--bg-tertiary);
+}
+
+.suggestion-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+  .suggestions-dropdown {
+    position: fixed;
+    left: 1rem;
+    right: 1rem;
+    max-height: 150px;
+    border-radius: 0.5rem;
+    margin-top: 0.5rem;
+  }
+  
+  .suggestion-item {
+    padding: 0.6rem 0.8rem;
+  }
+  
+  .suggestion-name {
+    font-size: 0.9rem;
+  }
 }
