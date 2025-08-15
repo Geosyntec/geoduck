@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HRU Climate Data Analysis</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "@duckdb/duckdb-wasm": "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.28.1-dev106.0/+esm"
+        }
+    }
+    </script>
+</head>
+<body class="container mt-5">
+    <header class="text-center mb-5">
+        <h1>HRU Climate Data Analysis</h1>
+        <nav class="mt-3">
+            <div class="btn-group" role="group" aria-label="Navigation">
+                <a href="index.html" class="btn btn-outline-primary">Data Analysis</a>
+                <a href="map.html" class="btn btn-outline-primary">Spatial Map</a>
+                <a href="hru_analysis.html" class="btn btn-primary">HRU Analysis</a>
+                <a href="debug.html" class="btn btn-outline-secondary">Debug</a>
+            </div>
+        </nav>
+    </header>
+    <main>
+        <section class="mb-4">
+            <p>Analyze Hydrologic Response Unit (HRU) climate data from different models and scenarios.</p>
+            
+            <!-- Model and Location Selection -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">📍 Data Selection</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label for="model-select" class="form-label">Climate Model</label>
+                            <select id="model-select" class="form-select">
+                                <option value="">Select a model...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="grid-select" class="form-label">Grid Location</label>
+                            <select id="grid-select" class="form-select">
+                                <option value="">Select a grid...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="hru-select" class="form-label">HRU Type</label>
+                            <select id="hru-select" class="form-select">
+                                <option value="">Select an HRU...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <div class="form-text mb-2">Current Data Source:</div>
+                            <div class="input-group">
+                                <input type="text" id="data-source" class="form-control" readonly 
+                                       placeholder="Select model, grid, and HRU to generate data source URL">
+                                <button id="load-data" class="btn btn-primary" type="button" disabled>
+                                    <span id="load-status">📊</span> Load Data
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Summary -->
+            <div id="data-summary" class="card mb-4" style="display: none;">
+                <div class="card-header">
+                    <h5 class="mb-0">📈 Data Summary</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h6 class="text-muted">Total Records</h6>
+                                <span id="total-records" class="h4 text-primary">-</span>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h6 class="text-muted">Date Range</h6>
+                                <span id="date-range" class="h6 text-info">-</span>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h6 class="text-muted">Available Columns</h6>
+                                <span id="column-count" class="h4 text-success">-</span>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h6 class="text-muted">HRU Info</h6>
+                                <span id="hru-info" class="h6 text-warning">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analysis Tools -->
+            <div id="analysis-section" class="card mb-4" style="display: none;">
+                <div class="card-header">
+                    <h5 class="mb-0">🔍 Analysis Tools</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="variable-select" class="form-label">Variable to Analyze</label>
+                            <select id="variable-select" class="form-select">
+                                <option value="suro+ifwo" selected>suro+ifwo (Surface Runoff + Interflow)</option>
+                            </select>
+                            <div class="form-text">Analyzing combined surface runoff and interflow</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="aggregation-select" class="form-label">Aggregation</label>
+                            <select id="aggregation-select" class="form-select">
+                                <option value="daily">Daily</option>
+                                <option value="monthly">Monthly</option>
+                                <option value="yearly">Yearly</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <button id="analyze-data" class="btn btn-success mt-4" type="button">
+                                📊 Analyze
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Visualization -->
+            <div id="chart-section" class="card mb-4" style="display: none;">
+                <div class="card-header">
+                    <h5 class="mb-0">📈 Time Series Visualization</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="time-series-chart" width="400" height="200"></canvas>
+                </div>
+            </div>
+
+            <!-- Data Table -->
+            <div id="table-section" class="card" style="display: none;">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">📋 Data Table</h5>
+                    <button id="download-csv" class="btn btn-outline-primary btn-sm">
+                        📁 Download CSV
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="table-container"></div>
+                    <div id="pagination-container" class="mt-3"></div>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Status Messages -->
+    <div id="status-message" class="alert" style="display: none;"></div>
+
+    <script type="module">
+        import * as duckdb from '@duckdb/duckdb-wasm';
+
+        // Global variables
+        let db;
+        let currentData = [];
+        let chart = null;
+        let currentPage = 1;
+        const rowsPerPage = 20;
+
+        // DOM elements
+        const modelSelect = document.getElementById('model-select');
+        const gridSelect = document.getElementById('grid-select');
+        const hruSelect = document.getElementById('hru-select');
+        const dataSource = document.getElementById('data-source');
+        const loadDataButton = document.getElementById('load-data');
+        const statusMessage = document.getElementById('status-message');
+
+        // Initialize DuckDB
+        async function initDuckDB() {
+            try {
+                showStatus('Initializing DuckDB...', 'info');
+                const bundle = await duckdb.selectBundle(duckdb.getJsDelivrBundles());
+                const worker = await duckdb.createWorker(bundle.mainWorker);
+                db = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(), worker);
+                await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+                
+                await db.open({
+                    query: {
+                        castBigIntToDouble: true,
+                    },
+                });
+
+                showStatus('DuckDB initialized successfully!', 'success');
+                return true;
+            } catch (error) {
+                console.error('Failed to initialize DuckDB:', error);
+                showStatus('Failed to initialize DuckDB: ' + error.message, 'danger');
+                return false;
+            }
+        }
+
+        // Load data from JSON files
+        async function loadSelectionData() {
+            try {
+                // Load model names
+                const modelResponse = await fetch('model_names.json');
+                const modelData = await modelResponse.json();
+                modelData.model_names.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.textContent = model;
+                    modelSelect.appendChild(option);
+                });
+
+                // Load grid names
+                const gridResponse = await fetch('grid_names.json');
+                const gridData = await gridResponse.json();
+                gridData.grid_names.forEach(grid => {
+                    const option = document.createElement('option');
+                    option.value = grid;
+                    option.textContent = grid;
+                    gridSelect.appendChild(option);
+                });
+
+                // Load HRU data
+                const hruResponse = await fetch('hrus.json');
+                const hruData = await hruResponse.json();
+                hruData.forEach(hru => {
+                    const option = document.createElement('option');
+                    option.value = hru.hru_name;
+                    option.textContent = `${hru.hru_name} - ${hru.Label}`;
+                    hruSelect.appendChild(option);
+                });
+
+            } catch (error) {
+                console.error('Error loading selection data:', error);
+                showStatus('Error loading selection data: ' + error.message, 'danger');
+            }
+        }
+
+        // Update data source URL
+        function updateDataSource() {
+            const model = modelSelect.value;
+            const grid = gridSelect.value;
+            const hru = hruSelect.value;
+
+            if (model && grid && hru) {
+                const url = `https://storage.googleapis.com/climate_ts/${model}/results/${grid}/${hru}.parquet`;
+                dataSource.value = url;
+                loadDataButton.disabled = false;
+            } else {
+                dataSource.value = '';
+                loadDataButton.disabled = true;
+            }
+        }
+
+        // Show status message
+        function showStatus(message, type) {
+            statusMessage.className = `alert alert-${type}`;
+            statusMessage.textContent = message;
+            statusMessage.style.display = 'block';
+            setTimeout(() => {
+                statusMessage.style.display = 'none';
+            }, 5000);
+        }
+
+        // Load and analyze data
+        async function loadData() {
+            if (!db) return;
+
+            const url = dataSource.value;
+            if (!url) return;
+
+            try {
+                showStatus('Loading data...', 'info');
+                loadDataButton.disabled = true;
+
+                const conn = await db.connect();
+                
+                // Get basic info about the dataset
+                const countResult = await conn.query(`SELECT COUNT(*) as count FROM '${url}'`);
+                const countData = countResult.toArray().map(row => row.toJSON());
+                const totalRecords = countData[0].count;
+
+                // Get column names
+                const schemaResult = await conn.query(`DESCRIBE SELECT * FROM '${url}' LIMIT 1`);
+                const schemaData = schemaResult.toArray().map(row => row.toJSON());
+                const columns = schemaData.map(col => col.column_name);
+
+                // Get sample data to determine date range if 'ix' column exists
+                let dateRange = 'N/A';
+                if (columns.includes('ix')) {
+                    const sampleResult = await conn.query(`SELECT MIN(ix) as min_ix, MAX(ix) as max_ix FROM '${url}'`);
+                    const sampleData = sampleResult.toArray().map(row => row.toJSON());
+                    const minIx = sampleData[0].min_ix;
+                    const maxIx = sampleData[0].max_ix;
+                    
+                    // Convert to approximate dates (assuming hourly data starting from model start)
+                    const startDate = new Date('1981-01-01'); // Default start date
+                    const minDate = new Date(startDate.getTime() + minIx * 60 * 60 * 1000);
+                    const maxDate = new Date(startDate.getTime() + maxIx * 60 * 60 * 1000);
+                    dateRange = `${minDate.toLocaleDateString()} - ${maxDate.toLocaleDateString()}`;
+                }
+
+                conn.close();
+
+                // Update summary
+                document.getElementById('total-records').textContent = totalRecords.toLocaleString();
+                document.getElementById('date-range').textContent = dateRange;
+                document.getElementById('column-count').textContent = columns.length;
+                document.getElementById('hru-info').textContent = hruSelect.options[hruSelect.selectedIndex].text.split(' - ')[1] || 'N/A';
+
+                // Check if required columns exist for suro+ifwo calculation
+                const hasSuro = columns.includes('suro');
+                const hasIfwo = columns.includes('ifwo');
+                
+                if (!hasSuro || !hasIfwo) {
+                    showStatus(`Warning: Missing required columns. Found: ${columns.join(', ')}. Need 'suro' and 'ifwo' for analysis.`, 'warning');
+                }
+
+                // Show sections
+                document.getElementById('data-summary').style.display = 'block';
+                document.getElementById('analysis-section').style.display = 'block';
+
+                showStatus('Data loaded successfully!', 'success');
+                loadDataButton.disabled = false;
+
+            } catch (error) {
+                console.error('Error loading data:', error);
+                showStatus('Error loading data: ' + error.message, 'danger');
+                loadDataButton.disabled = false;
+            }
+        }
+
+        // Analyze data and create visualization
+        async function analyzeData() {
+            const aggregation = document.getElementById('aggregation-select').value;
+            
+            if (!db) return;
+
+            try {
+                showStatus('Analyzing suro+ifwo data...', 'info');
+                
+                const conn = await db.connect();
+                const url = dataSource.value;
+
+                let query;
+                if (aggregation === 'daily') {
+                    query = `
+                        SELECT 
+                            DATE_TRUNC('day', '1981-01-01'::TIMESTAMP + INTERVAL (ix) HOUR) as date,
+                            AVG(suro + ifwo) as avg_value,
+                            MIN(suro + ifwo) as min_value,
+                            MAX(suro + ifwo) as max_value
+                        FROM '${url}' 
+                        WHERE ix IS NOT NULL AND suro IS NOT NULL AND ifwo IS NOT NULL
+                        GROUP BY date 
+                        ORDER BY date 
+                        LIMIT 1000
+                    `;
+                } else if (aggregation === 'monthly') {
+                    query = `
+                        SELECT 
+                            DATE_TRUNC('month', '1981-01-01'::TIMESTAMP + INTERVAL (ix) HOUR) as date,
+                            AVG(suro + ifwo) as avg_value,
+                            MIN(suro + ifwo) as min_value,
+                            MAX(suro + ifwo) as max_value
+                        FROM '${url}' 
+                        WHERE ix IS NOT NULL AND suro IS NOT NULL AND ifwo IS NOT NULL
+                        GROUP BY date 
+                        ORDER BY date
+                    `;
+                } else { // yearly
+                    query = `
+                        SELECT 
+                            DATE_TRUNC('year', '1981-01-01'::TIMESTAMP + INTERVAL (ix) HOUR) as date,
+                            AVG(suro + ifwo) as avg_value,
+                            MIN(suro + ifwo) as min_value,
+                            MAX(suro + ifwo) as max_value
+                        FROM '${url}' 
+                        WHERE ix IS NOT NULL AND suro IS NOT NULL AND ifwo IS NOT NULL
+                        GROUP BY date 
+                        ORDER BY date
+                    `;
+                }
+
+                const result = await conn.query(query);
+                currentData = result.toArray().map(row => row.toJSON());
+                conn.close();
+
+                createChart(currentData, 'suro+ifwo', aggregation);
+                createTable(currentData);
+
+                document.getElementById('chart-section').style.display = 'block';
+                document.getElementById('table-section').style.display = 'block';
+
+                showStatus('Analysis complete!', 'success');
+
+            } catch (error) {
+                console.error('Error analyzing data:', error);
+                showStatus('Error analyzing data: ' + error.message, 'danger');
+            }
+        }
+
+        // Create chart
+        function createChart(data, variable, aggregation) {
+            const ctx = document.getElementById('time-series-chart').getContext('2d');
+            
+            if (chart) {
+                chart.destroy();
+            }
+
+            const dates = data.map(d => new Date(d.date).toLocaleDateString());
+            const avgValues = data.map(d => d.avg_value);
+            const minValues = data.map(d => d.min_value);
+            const maxValues = data.map(d => d.max_value);
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: `Average ${variable} (mm)`,
+                        data: avgValues,
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        tension: 0.1
+                    }, {
+                        label: `Min ${variable} (mm)`,
+                        data: minValues,
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                        tension: 0.1
+                    }, {
+                        label: `Max ${variable} (mm)`,
+                        data: maxValues,
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `Surface Runoff + Interflow (${aggregation} aggregation)`
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Flow (mm)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Create data table
+        function createTable(data) {
+            const container = document.getElementById('table-container');
+            const startIdx = (currentPage - 1) * rowsPerPage;
+            const endIdx = startIdx + rowsPerPage;
+            const pageData = data.slice(startIdx, endIdx);
+
+            let html = '<table class="table table-striped table-hover"><thead><tr>';
+            
+            if (data.length > 0) {
+                Object.keys(data[0]).forEach(key => {
+                    html += `<th>${key}</th>`;
+                });
+                html += '</tr></thead><tbody>';
+
+                pageData.forEach(row => {
+                    html += '<tr>';
+                    Object.values(row).forEach(value => {
+                        html += `<td>${value}</td>`;
+                    });
+                    html += '</tr>';
+                });
+                html += '</tbody></table>';
+            }
+
+            container.innerHTML = html;
+            createPagination(data.length);
+        }
+
+        // Create pagination
+        function createPagination(totalItems) {
+            const totalPages = Math.ceil(totalItems / rowsPerPage);
+            const container = document.getElementById('pagination-container');
+            
+            let html = '<nav><ul class="pagination justify-content-center">';
+            
+            for (let i = 1; i <= totalPages; i++) {
+                html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+                    <a class="page-link" href="#" onclick="changePage(${i})">${i}</a>
+                </li>`;
+            }
+            
+            html += '</ul></nav>';
+            container.innerHTML = html;
+        }
+
+        // Change page
+        window.changePage = function(page) {
+            currentPage = page;
+            createTable(currentData);
+        };
+
+        // Download CSV
+        function downloadCSV() {
+            if (currentData.length === 0) return;
+
+            const headers = Object.keys(currentData[0]);
+            const csvContent = [
+                headers.join(','),
+                ...currentData.map(row => 
+                    headers.map(header => 
+                        `"${row[header]}"`
+                    ).join(',')
+                )
+            ].join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `hru_analysis_${new Date().getTime()}.csv`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+
+        // Event listeners
+        modelSelect.addEventListener('change', updateDataSource);
+        gridSelect.addEventListener('change', updateDataSource);
+        hruSelect.addEventListener('change', updateDataSource);
+        loadDataButton.addEventListener('click', loadData);
+        document.getElementById('analyze-data').addEventListener('click', analyzeData);
+        document.getElementById('download-csv').addEventListener('click', downloadCSV);
+
+        // Initialize everything
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadSelectionData();
+            await initDuckDB();
+        });
+    </script>
+</body>
+</html>
