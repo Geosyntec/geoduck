@@ -40,10 +40,10 @@
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-4">
-                            <label for="model-select" class="form-label">Climate Model</label>
-                            <select id="model-select" class="form-select">
-                                <option value="">Select a model...</option>
-                            </select>
+                            <label for="model-container" class="form-label">Climate Models</label>
+                            <div id="model-container">
+                                <button id="add-model" class="btn btn-outline-info btn-sm">+ Add Model</button>
+                            </div>
                         </div>
                         <div class="col-md-4">
                             <label for="grid-select" class="form-label">Grid Location</label>
@@ -52,10 +52,10 @@
                             </select>
                         </div>
                         <div class="col-md-4">
-                            <label for="hru-select" class="form-label">HRU Type</label>
-                            <select id="hru-select" class="form-select">
-                                <option value="">Select an HRU...</option>
-                            </select>
+                            <label for="hru-container" class="form-label">HRU Types & Areas</label>
+                            <div id="hru-container">
+                                <button id="add-hru" class="btn btn-outline-success btn-sm">+ Add HRU</button>
+                            </div>
                         </div>
                     </div>
                     <div class="row mt-3">
@@ -120,9 +120,9 @@
                             <select id="variable-select" class="form-select">
                                 <option value="suro+ifwo" selected>suro+ifwo (Surface Runoff + Interflow)</option>
                             </select>
-                            <div class="form-text">Analyzing combined surface runoff and interflow</div>
+                            <div class="form-text">Analyzing combined surface runoff and interflow in liters per second (L/s)</div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <label for="aggregation-select" class="form-label">Aggregation</label>
                             <select id="aggregation-select" class="form-select">
                                 <option value="daily">Daily</option>
@@ -130,7 +130,14 @@
                                 <option value="yearly">Yearly</option>
                             </select>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
+                            <label for="chart-type-select" class="form-label">Chart Type</label>
+                            <select id="chart-type-select" class="form-select">
+                                <option value="individual">Individual Models</option>
+                                <option value="range">Model Range (Shaded)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
                             <button id="analyze-data" class="btn btn-success mt-4" type="button">
                                 📊 Analyze
                             </button>
@@ -145,7 +152,9 @@
                     <h5 class="mb-0">📈 Time Series Visualization</h5>
                 </div>
                 <div class="card-body">
-                    <canvas id="time-series-chart" width="400" height="200"></canvas>
+                    <div style="height: 400px; position: relative;">
+                        <canvas id="time-series-chart"></canvas>
+                    </div>
                 </div>
             </div>
 
@@ -180,12 +189,22 @@
         const rowsPerPage = 20;
 
         // DOM elements
-        const modelSelect = document.getElementById('model-select');
+        const modelContainer = document.getElementById('model-container');
+        const addModelButton = document.getElementById('add-model');
         const gridSelect = document.getElementById('grid-select');
-        const hruSelect = document.getElementById('hru-select');
+        const hruContainer = document.getElementById('hru-container');
+        const addHruButton = document.getElementById('add-hru');
         const dataSource = document.getElementById('data-source');
         const loadDataButton = document.getElementById('load-data');
         const statusMessage = document.getElementById('status-message');
+
+        // Model and HRU management
+        let selectedModels = [];
+        let selectedHrus = [];
+        let modelData = [];
+        let hruData = [];
+        let modelCounter = 0;
+        let hruCounter = 0;
 
         // Initialize DuckDB
         async function initDuckDB() {
@@ -216,13 +235,8 @@
             try {
                 // Load model names
                 const modelResponse = await fetch('model_names.json');
-                const modelData = await modelResponse.json();
-                modelData.model_names.forEach(model => {
-                    const option = document.createElement('option');
-                    option.value = model;
-                    option.textContent = model;
-                    modelSelect.appendChild(option);
-                });
+                const modelJson = await modelResponse.json();
+                modelData = modelJson.model_names;
 
                 // Load grid names
                 const gridResponse = await fetch('grid_names.json');
@@ -236,13 +250,7 @@
 
                 // Load HRU data
                 const hruResponse = await fetch('hrus.json');
-                const hruData = await hruResponse.json();
-                hruData.forEach(hru => {
-                    const option = document.createElement('option');
-                    option.value = hru.hru_name;
-                    option.textContent = `${hru.hru_name} - ${hru.Label}`;
-                    hruSelect.appendChild(option);
-                });
+                hruData = await hruResponse.json();
 
             } catch (error) {
                 console.error('Error loading selection data:', error);
@@ -250,15 +258,128 @@
             }
         }
 
+        // Add model selection row
+        function addModelRow() {
+            modelCounter++;
+            const modelRow = document.createElement('div');
+            modelRow.className = 'model-row mb-2';
+            modelRow.id = `model-row-${modelCounter}`;
+            
+            modelRow.innerHTML = `
+                <div class="input-group input-group-sm">
+                    <select class="form-select model-select" data-id="${modelCounter}">
+                        <option value="">Select Model...</option>
+                        ${modelData.map(model => `<option value="${model}">${model}</option>`).join('')}
+                    </select>
+                    <button class="btn btn-outline-danger" type="button" onclick="removeModelRow(${modelCounter})">
+                        ×
+                    </button>
+                </div>
+            `;
+            
+            modelContainer.insertBefore(modelRow, addModelButton);
+            
+            // Add event listener
+            const select = modelRow.querySelector('.model-select');
+            select.addEventListener('change', updateSelectedModels);
+        }
+
+        // Remove model row
+        window.removeModelRow = function(id) {
+            const row = document.getElementById(`model-row-${id}`);
+            if (row) {
+                row.remove();
+                updateSelectedModels();
+            }
+        };
+
+        // Update selected models array
+        function updateSelectedModels() {
+            selectedModels = [];
+            const rows = document.querySelectorAll('.model-row');
+            
+            rows.forEach(row => {
+                const select = row.querySelector('.model-select');
+                if (select.value) {
+                    selectedModels.push(select.value);
+                }
+            });
+            
+            updateDataSource();
+        }
+
+        // Add HRU selection row
+        function addHruRow() {
+            hruCounter++;
+            const hruRow = document.createElement('div');
+            hruRow.className = 'hru-row mb-2';
+            hruRow.id = `hru-row-${hruCounter}`;
+            
+            hruRow.innerHTML = `
+                <div class="input-group input-group-sm">
+                    <select class="form-select hru-select" data-id="${hruCounter}">
+                        <option value="">Select HRU...</option>
+                        ${hruData.map(hru => `<option value="${hru.hru_name}">${hru.hru_name} - ${hru.Label}</option>`).join('')}
+                    </select>
+                    <input type="number" class="form-control hru-area" data-id="${hruCounter}" 
+                           placeholder="Area (m²)" min="0" step="0.01">
+                    <button class="btn btn-outline-danger" type="button" onclick="removeHruRow(${hruCounter})">
+                        ×
+                    </button>
+                </div>
+            `;
+            
+            hruContainer.insertBefore(hruRow, addHruButton);
+            
+            // Add event listeners
+            const select = hruRow.querySelector('.hru-select');
+            const area = hruRow.querySelector('.hru-area');
+            select.addEventListener('change', updateSelectedHrus);
+            area.addEventListener('input', updateSelectedHrus);
+        }
+
+        // Remove HRU row
+        window.removeHruRow = function(id) {
+            const row = document.getElementById(`hru-row-${id}`);
+            if (row) {
+                row.remove();
+                updateSelectedHrus();
+            }
+        };
+
+        // Update selected HRUs array
+        function updateSelectedHrus() {
+            selectedHrus = [];
+            const rows = document.querySelectorAll('.hru-row');
+            
+            rows.forEach(row => {
+                const select = row.querySelector('.hru-select');
+                const area = row.querySelector('.hru-area');
+                
+                if (select.value && area.value && parseFloat(area.value) > 0) {
+                    const hruInfo = hruData.find(h => h.hru_name === select.value);
+                    selectedHrus.push({
+                        hru_name: select.value,
+                        area: parseFloat(area.value),
+                        label: hruInfo ? hruInfo.Label : select.value
+                    });
+                }
+            });
+            
+            updateDataSource();
+        }
+
         // Update data source URL
         function updateDataSource() {
-            const model = modelSelect.value;
             const grid = gridSelect.value;
-            const hru = hruSelect.value;
+            const hasValidModels = selectedModels.length > 0;
+            const hasValidHrus = selectedHrus.length > 0;
 
-            if (model && grid && hru) {
-                const url = `https://storage.googleapis.com/climate_ts/${model}/results/${grid}/${hru}.parquet`;
-                dataSource.value = url;
+            if (hasValidModels && grid && hasValidHrus) {
+                const totalArea = selectedHrus.reduce((sum, hru) => sum + hru.area, 0);
+                const modelList = selectedModels.join(', ');
+                const hruList = selectedHrus.map(hru => hru.hru_name).join(', ');
+                dataSource.value = `${selectedModels.length} Models (${modelList}) | ${selectedHrus.length} HRUs (${hruList}) | Total Area: ${totalArea.toLocaleString()} m²`;
                 loadDataButton.disabled = false;
             } else {
                 dataSource.value = '';
@@ -278,63 +399,80 @@
 
         // Load and analyze data
         async function loadData() {
-            if (!db) return;
-
-            const url = dataSource.value;
-            if (!url) return;
+            if (!db || selectedModels.length === 0 || selectedHrus.length === 0) return;
 
             try {
-                showStatus('Loading data...', 'info');
+                showStatus('Loading data for multiple models and HRUs...', 'info');
                 loadDataButton.disabled = true;
 
                 const conn = await db.connect();
+                const grid = gridSelect.value;
                 
-                // Get basic info about the dataset
-                const countResult = await conn.query(`SELECT COUNT(*) as count FROM '${url}'`);
-                const countData = countResult.toArray().map(row => row.toJSON());
-                const totalRecords = countData[0].count;
-
-                // Get column names
-                const schemaResult = await conn.query(`DESCRIBE SELECT * FROM '${url}' LIMIT 1`);
-                const schemaData = schemaResult.toArray().map(row => row.toJSON());
-                const columns = schemaData.map(col => col.column_name);
-
-                // Get sample data to determine date range if 'ix' column exists
+                // Check each model/HRU combination and get basic info
+                let totalRecords = 0;
                 let dateRange = 'N/A';
-                if (columns.includes('ix')) {
-                    const sampleResult = await conn.query(`SELECT MIN(ix) as min_ix, MAX(ix) as max_ix FROM '${url}'`);
-                    const sampleData = sampleResult.toArray().map(row => row.toJSON());
-                    const minIx = sampleData[0].min_ix;
-                    const maxIx = sampleData[0].max_ix;
-                    
-                    // Convert to approximate dates (assuming hourly data starting from model start)
-                    const startDate = new Date('1981-01-01'); // Default start date
-                    const minDate = new Date(startDate.getTime() + minIx * 60 * 60 * 1000);
-                    const maxDate = new Date(startDate.getTime() + maxIx * 60 * 60 * 1000);
-                    dateRange = `${minDate.toLocaleDateString()} - ${maxDate.toLocaleDateString()}`;
+                let allColumns = new Set();
+                let loadedCombinations = 0;
+                const totalCombinations = selectedModels.length * selectedHrus.length;
+                
+                for (const model of selectedModels) {
+                    for (const hru of selectedHrus) {
+                        const url = `https://storage.googleapis.com/climate_ts/${model}/results/${grid}/${hru.hru_name}.parquet`;
+                        
+                        try {
+                            // Get basic info about this model/HRU dataset
+                            const countResult = await conn.query(`SELECT COUNT(*) as count FROM '${url}'`);
+                            const countData = countResult.toArray().map(row => row.toJSON());
+                            totalRecords = countData[0].count; // All datasets should have same number of records
+                            
+                            // Get column names
+                            const schemaResult = await conn.query(`DESCRIBE SELECT * FROM '${url}' LIMIT 1`);
+                            const schemaData = schemaResult.toArray().map(row => row.toJSON());
+                            schemaData.forEach(col => allColumns.add(col.column_name));
+                            
+                            // Get date range from first dataset only
+                            if (dateRange === 'N/A' && allColumns.has('ix')) {
+                                const sampleResult = await conn.query(`SELECT MIN(ix) as min_ix, MAX(ix) as max_ix FROM '${url}'`);
+                                const sampleData = sampleResult.toArray().map(row => row.toJSON());
+                                const minIx = sampleData[0].min_ix;
+                                const maxIx = sampleData[0].max_ix;
+                                
+                                const startDate = new Date('1981-01-01');
+                                const minDate = new Date(startDate.getTime() + minIx * 60 * 60 * 1000);
+                                const maxDate = new Date(startDate.getTime() + maxIx * 60 * 60 * 1000);
+                                dateRange = `${minDate.toLocaleDateString()} - ${maxDate.toLocaleDateString()}`;
+                            }
+                            
+                            loadedCombinations++;
+                        } catch (error) {
+                            showStatus(`Error loading ${model}/${hru.hru_name}: ${error.message}`, 'warning');
+                        }
+                    }
                 }
 
                 conn.close();
 
                 // Update summary
+                const totalArea = selectedHrus.reduce((sum, hru) => sum + hru.area, 0);
+                
                 document.getElementById('total-records').textContent = totalRecords.toLocaleString();
                 document.getElementById('date-range').textContent = dateRange;
-                document.getElementById('column-count').textContent = columns.length;
-                document.getElementById('hru-info').textContent = hruSelect.options[hruSelect.selectedIndex].text.split(' - ')[1] || 'N/A';
+                document.getElementById('column-count').textContent = allColumns.size;
+                document.getElementById('hru-info').textContent = `${selectedModels.length} Models | ${selectedHrus.length} HRUs | ${totalArea.toLocaleString()} m² total`;
 
                 // Check if required columns exist for suro+ifwo calculation
-                const hasSuro = columns.includes('suro');
-                const hasIfwo = columns.includes('ifwo');
+                const hasSuro = allColumns.has('suro');
+                const hasIfwo = allColumns.has('ifwo');
                 
                 if (!hasSuro || !hasIfwo) {
-                    showStatus(`Warning: Missing required columns. Found: ${columns.join(', ')}. Need 'suro' and 'ifwo' for analysis.`, 'warning');
+                    showStatus(`Warning: Missing required columns. Found: ${Array.from(allColumns).join(', ')}. Need 'suro' and 'ifwo' for analysis.`, 'warning');
                 }
 
                 // Show sections
                 document.getElementById('data-summary').style.display = 'block';
                 document.getElementById('analysis-section').style.display = 'block';
 
-                showStatus('Data loaded successfully!', 'success');
+                showStatus(`Data loaded successfully for ${selectedModels.length} models and ${selectedHrus.length} HRUs (${loadedCombinations}/${totalCombinations} combinations)!`, 'success');
                 loadDataButton.disabled = false;
 
             } catch (error) {
@@ -347,52 +485,90 @@
         // Analyze data and create visualization
         async function analyzeData() {
             const aggregation = document.getElementById('aggregation-select').value;
+            const chartType = document.getElementById('chart-type-select').value;
             
-            if (!db) return;
+            if (!db || selectedModels.length === 0 || selectedHrus.length === 0) return;
 
             try {
-                showStatus('Analyzing suro+ifwo data...', 'info');
+                showStatus('Analyzing multi-model suro+ifwo data (converting to L/s)...', 'info');
                 
                 const conn = await db.connect();
-                const url = dataSource.value;
+                const grid = gridSelect.value;
+                const totalArea = selectedHrus.reduce((sum, hru) => sum + hru.area, 0);
+
+                // Build queries for each model separately to allow comparison
+                const modelQueries = selectedModels.map(model => {
+                    const hruQueries = selectedHrus.map(hru => {
+                        const url = `https://storage.googleapis.com/climate_ts/${model}/results/${grid}/${hru.hru_name}.parquet`;
+                        // Convert from mm to L/s: 
+                        // mm * m² * (1 m / 1000 mm) * (1000 L / 1 m³) * (1 hour / 3600 seconds)
+                        // = mm * m² * (1/1000) * (1000) * (1/3600) = mm * m² / 3600
+                        const conversionFactor = hru.area / 3600; // mm*m²/hour to L/s
+                        
+                        return `
+                            SELECT 
+                                ix,
+                                (suro + ifwo) * ${conversionFactor} as flow_ls,
+                                '${model}' as model_name,
+                                '${hru.hru_name}' as hru_name,
+                                ${hru.area} as area
+                            FROM '${url}' 
+                            WHERE ix IS NOT NULL AND suro IS NOT NULL AND ifwo IS NOT NULL
+                        `;
+                    });
+                    
+                    return hruQueries.join(' UNION ALL ');
+                });
 
                 let query;
                 if (aggregation === 'daily') {
                     query = `
+                        WITH combined_data AS (
+                            ${modelQueries.join(' UNION ALL ')}
+                        )
                         SELECT 
                             DATE_TRUNC('day', '1981-01-01'::TIMESTAMP + INTERVAL (ix) HOUR) as date,
-                            AVG(suro + ifwo) as avg_value,
-                            MIN(suro + ifwo) as min_value,
-                            MAX(suro + ifwo) as max_value
-                        FROM '${url}' 
-                        WHERE ix IS NOT NULL AND suro IS NOT NULL AND ifwo IS NOT NULL
-                        GROUP BY date 
-                        ORDER BY date 
-                        LIMIT 1000
+                            model_name,
+                            SUM(flow_ls) as total_flow,
+                            AVG(flow_ls) as avg_flow,
+                            MIN(flow_ls) as min_flow,
+                            MAX(flow_ls) as max_flow
+                        FROM combined_data
+                        GROUP BY date, model_name
+                        ORDER BY date, model_name
+                        LIMIT 2000
                     `;
                 } else if (aggregation === 'monthly') {
                     query = `
+                        WITH combined_data AS (
+                            ${modelQueries.join(' UNION ALL ')}
+                        )
                         SELECT 
                             DATE_TRUNC('month', '1981-01-01'::TIMESTAMP + INTERVAL (ix) HOUR) as date,
-                            AVG(suro + ifwo) as avg_value,
-                            MIN(suro + ifwo) as min_value,
-                            MAX(suro + ifwo) as max_value
-                        FROM '${url}' 
-                        WHERE ix IS NOT NULL AND suro IS NOT NULL AND ifwo IS NOT NULL
-                        GROUP BY date 
-                        ORDER BY date
+                            model_name,
+                            AVG(flow_ls) as total_flow,
+                            AVG(flow_ls) as avg_flow,
+                            MIN(flow_ls) as min_flow,
+                            MAX(flow_ls) as max_flow
+                        FROM combined_data
+                        GROUP BY date, model_name
+                        ORDER BY date, model_name
                     `;
                 } else { // yearly
                     query = `
+                        WITH combined_data AS (
+                            ${modelQueries.join(' UNION ALL ')}
+                        )
                         SELECT 
                             DATE_TRUNC('year', '1981-01-01'::TIMESTAMP + INTERVAL (ix) HOUR) as date,
-                            AVG(suro + ifwo) as avg_value,
-                            MIN(suro + ifwo) as min_value,
-                            MAX(suro + ifwo) as max_value
-                        FROM '${url}' 
-                        WHERE ix IS NOT NULL AND suro IS NOT NULL AND ifwo IS NOT NULL
-                        GROUP BY date 
-                        ORDER BY date
+                            model_name,
+                            AVG(flow_ls) as total_flow,
+                            AVG(flow_ls) as avg_flow,
+                            MIN(flow_ls) as min_flow,
+                            MAX(flow_ls) as max_flow
+                        FROM combined_data
+                        GROUP BY date, model_name
+                        ORDER BY date, model_name
                     `;
                 }
 
@@ -400,7 +576,14 @@
                 currentData = result.toArray().map(row => row.toJSON());
                 conn.close();
 
-                createChart(currentData, 'suro+ifwo', aggregation);
+                // Debug: Log sample data structure
+                console.log('Sample data:', currentData.slice(0, 5));
+                console.log(`Total data points: ${currentData.length}`);
+                
+                const uniqueModels = [...new Set(currentData.map(row => row.model_name))];
+                console.log(`Unique models in data: ${uniqueModels.join(', ')}`);
+
+                createChart(currentData, 'suro+ifwo', aggregation, chartType);
                 createTable(currentData);
 
                 document.getElementById('chart-section').style.display = 'block';
@@ -415,48 +598,195 @@
         }
 
         // Create chart
-        function createChart(data, variable, aggregation) {
+        function createChart(data, variable, aggregation, chartType) {
             const ctx = document.getElementById('time-series-chart').getContext('2d');
             
             if (chart) {
                 chart.destroy();
             }
 
-            const dates = data.map(d => new Date(d.date).toLocaleDateString());
-            const avgValues = data.map(d => d.avg_value);
-            const minValues = data.map(d => d.min_value);
-            const maxValues = data.map(d => d.max_value);
+            // Group data by date and compute ensemble statistics
+            const dateData = {};
+            const allDates = new Set();
+            
+            data.forEach(row => {
+                const dateStr = new Date(row.date).toISOString().split('T')[0];
+                
+                if (!dateData[dateStr]) {
+                    dateData[dateStr] = [];
+                }
+                dateData[dateStr].push({
+                    model: row.model_name,
+                    value: row.total_flow
+                });
+                allDates.add(dateStr);
+            });
+
+            // Sort dates chronologically
+            const sortedDates = Array.from(allDates).sort();
+            const displayDates = sortedDates.map(date => new Date(date).toLocaleDateString());
+
+            let datasets = [];
+            let chartTitle = '';
+
+            if (chartType === 'range') {
+                // Calculate ensemble statistics for each date
+                const ensembleStats = sortedDates.map(date => {
+                    const values = dateData[date]?.map(d => d.value) || [];
+                    if (values.length === 0) return { min: null, max: null, mean: null };
+                    
+                    return {
+                        min: Math.min(...values),
+                        max: Math.max(...values),
+                        mean: values.reduce((sum, val) => sum + val, 0) / values.length
+                    };
+                });
+
+                const minValues = ensembleStats.map(stat => stat.min);
+                const maxValues = ensembleStats.map(stat => stat.max);
+                const meanValues = ensembleStats.map(stat => stat.mean);
+
+                datasets = [
+                    {
+                        label: 'Model Range',
+                        data: maxValues,
+                        borderColor: 'rgba(75, 192, 192, 0.8)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.3)',
+                        borderWidth: 1,
+                        tension: 0.1,
+                        fill: '+1',
+                        pointRadius: 0,
+                        pointHoverRadius: 3
+                    },
+                    {
+                        label: 'Model Range (Min)',
+                        data: minValues,
+                        borderColor: 'rgba(75, 192, 192, 0.8)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.3)',
+                        borderWidth: 1,
+                        tension: 0.1,
+                        fill: false,
+                        pointRadius: 0,
+                        pointHoverRadius: 3
+                    },
+                    {
+                        label: 'Ensemble Mean',
+                        data: meanValues,
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.1,
+                        fill: false,
+                        pointRadius: 2,
+                        pointHoverRadius: 5
+                    }
+                ];
+
+                chartTitle = `Model Ensemble Range: Surface Runoff + Interflow (${aggregation} aggregation)`;
+            } else {
+                // Individual model lines (original behavior)
+                const modelData = {};
+                
+                data.forEach(row => {
+                    const model = row.model_name;
+                    const dateStr = new Date(row.date).toISOString().split('T')[0];
+                    
+                    if (!modelData[model]) {
+                        modelData[model] = [];
+                    }
+                    modelData[model].push({
+                        date: dateStr,
+                        value: row.total_flow
+                    });
+                });
+
+                const colors = [
+                    'rgb(75, 192, 192)',    'rgb(255, 99, 132)',    'rgb(54, 162, 235)',
+                    'rgb(255, 205, 86)',    'rgb(153, 102, 255)',   'rgb(255, 159, 64)',
+                    'rgb(46, 125, 50)',     'rgb(156, 39, 176)',    'rgb(255, 87, 34)',
+                    'rgb(0, 150, 136)',     'rgb(121, 85, 72)',     'rgb(96, 125, 139)'
+                ];
+
+                datasets = Object.keys(modelData).map((model, index) => {
+                    const sortedModelData = modelData[model].sort((a, b) => a.date.localeCompare(b.date));
+                    const modelValues = sortedDates.map(date => {
+                        const dataPoint = sortedModelData.find(d => d.date === date);
+                        return dataPoint ? dataPoint.value : null;
+                    });
+                    
+                    const modelDisplayName = model.length > 25 ? model.substring(0, 25) + '...' : model;
+                    
+                    return {
+                        label: modelDisplayName,
+                        data: modelValues,
+                        borderColor: colors[index % colors.length],
+                        backgroundColor: colors[index % colors.length].replace('rgb', 'rgba').replace(')', ', 0.1)'),
+                        borderWidth: 2,
+                        tension: 0.1,
+                        fill: false,
+                        pointRadius: 2,
+                        pointHoverRadius: 5
+                    };
+                });
+
+                chartTitle = `Multi-Model Comparison: Surface Runoff + Interflow (${aggregation} aggregation)`;
+            }
 
             chart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: dates,
-                    datasets: [{
-                        label: `Average ${variable} (mm)`,
-                        data: avgValues,
-                        borderColor: 'rgb(75, 192, 192)',
-                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                        tension: 0.1
-                    }, {
-                        label: `Min ${variable} (mm)`,
-                        data: minValues,
-                        borderColor: 'rgb(255, 99, 132)',
-                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                        tension: 0.1
-                    }, {
-                        label: `Max ${variable} (mm)`,
-                        data: maxValues,
-                        borderColor: 'rgb(54, 162, 235)',
-                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                        tension: 0.1
-                    }]
+                    labels: displayDates,
+                    datasets: datasets
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         title: {
                             display: true,
-                            text: `Surface Runoff + Interflow (${aggregation} aggregation)`
+                            text: chartTitle,
+                            font: {
+                                size: 16
+                            }
+                        },
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 15,
+                                font: {
+                                    size: 11
+                                },
+                                filter: function(legendItem) {
+                                    // Hide the "Model Range (Min)" legend item for cleaner display
+                                    return legendItem.text !== 'Model Range (Min)';
+                                }
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                title: function(context) {
+                                    return `Date: ${context[0].label}`;
+                                },
+                                label: function(context) {
+                                    const value = context.parsed.y;
+                                    if (value !== null) {
+                                        if (chartType === 'range') {
+                                            if (context.dataset.label === 'Model Range') {
+                                                const minValue = context.chart.data.datasets[1].data[context.dataIndex];
+                                                return `Model Range: ${minValue?.toFixed(2)} - ${value.toFixed(2)} L/s`;
+                                            } else if (context.dataset.label === 'Ensemble Mean') {
+                                                return `Ensemble Mean: ${value.toFixed(2)} L/s`;
+                                            }
+                                        } else {
+                                            return `${context.dataset.label}: ${value.toFixed(2)} L/s`;
+                                        }
+                                    }
+                                    return `${context.dataset.label}: No data`;
+                                }
+                            }
                         }
                     },
                     scales: {
@@ -464,18 +794,54 @@
                             beginAtZero: true,
                             title: {
                                 display: true,
-                                text: 'Flow (mm)'
+                                text: 'Surface Runoff + Interflow (L/s)',
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
                             }
                         },
                         x: {
                             title: {
                                 display: true,
-                                text: 'Date'
+                                text: 'Date',
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            },
+                            ticks: {
+                                maxTicksLimit: 10,
+                                maxRotation: 45
                             }
+                        }
+                    },
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    elements: {
+                        line: {
+                            tension: 0.1
                         }
                     }
                 }
             });
+
+            // Add logging info
+            if (chartType === 'range') {
+                const modelCount = new Set(data.map(row => row.model_name)).size;
+                console.log(`Ensemble chart created with ${modelCount} models showing range and mean`);
+            } else {
+                const modelCount = Object.keys(datasets).length;
+                console.log(`Individual model chart created with ${modelCount} models`);
+            }
         }
 
         // Create data table
@@ -554,9 +920,9 @@
         }
 
         // Event listeners
-        modelSelect.addEventListener('change', updateDataSource);
+        addModelButton.addEventListener('click', addModelRow);
         gridSelect.addEventListener('change', updateDataSource);
-        hruSelect.addEventListener('change', updateDataSource);
+        addHruButton.addEventListener('click', addHruRow);
         loadDataButton.addEventListener('click', loadData);
         document.getElementById('analyze-data').addEventListener('click', analyzeData);
         document.getElementById('download-csv').addEventListener('click', downloadCSV);
@@ -565,6 +931,9 @@
         document.addEventListener('DOMContentLoaded', async () => {
             await loadSelectionData();
             await initDuckDB();
+            // Add default rows
+            addModelRow();
+            addHruRow();
         });
     </script>
 </body>
