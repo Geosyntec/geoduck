@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load HRU data from JSON file
     async function loadHruData() {
         try {
-            const response = await fetch('hrus.json');
+            const response = await fetch('data/hrus.json');
             hruData = await response.json();
             console.log('Loaded HRU data:', hruData);
         } catch (error) {
