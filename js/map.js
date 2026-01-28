@@ -5,6 +5,14 @@ let selectedCoordinates = null;
 let db = null;
 let currentData = null;
 
+// Convert relative path to absolute URL for DuckDB WASM
+function toAbsoluteUrl(path) {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+        return path;
+    }
+    return new URL(path, window.location.href).href;
+}
+
 // Initialize map function
 function initializeMap() {
     // Check if map container exists
@@ -371,18 +379,19 @@ async function handleAddressSearch() {
 // Find grid cell containing the specified coordinates
 async function findContainingGrid(lat, lng, locationName) {
     const sourceInput = document.getElementById('geojson-source');
-    const geojsonUrl = sourceInput ? sourceInput.value.trim() : '';
-    
-    if (!geojsonUrl) {
+    const geojsonPath = sourceInput ? sourceInput.value.trim() : '';
+
+    if (!geojsonPath) {
         updateStatus(`Found: ${locationName} (no grid data source specified)`);
         return;
     }
 
     try {
         updateStatus('Finding containing grid cell...');
-        
+
+        const geojsonUrl = toAbsoluteUrl(geojsonPath);
         const conn = await db.connect();
-        
+
         // Query to find grid cells that contain the point
         const query = `
             WITH grid_data AS (
@@ -512,17 +521,18 @@ async function executeQuery() {
     
     const sourceInput = document.getElementById('geojson-source');
     const queryInput = document.getElementById('sql-query');
-    
-    const source = sourceInput ? sourceInput.value.trim() : '';
+
+    const sourcePath = sourceInput ? sourceInput.value.trim() : '';
     const queryTemplate = queryInput ? queryInput.value.trim() : '';
-    
-    if (!source || !queryTemplate) {
-        alert('Please provide both a GeoJSON source URL and SQL query');
+
+    if (!sourcePath || !queryTemplate) {
+        alert('Please provide both a GeoJSON source and SQL query');
         return;
     }
-    
-    // Replace {SOURCE} placeholder with actual source
-    const query = queryTemplate.replace(/\{SOURCE\}/g, `'${source}'`);
+
+    // Replace {SOURCE} placeholder with absolute URL
+    const sourceUrl = toAbsoluteUrl(sourcePath);
+    const query = queryTemplate.replace(/\{SOURCE\}/g, `'${sourceUrl}'`);
     
     try {
         updateStatus('Executing query...');
