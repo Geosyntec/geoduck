@@ -234,12 +234,12 @@
         async function loadSelectionData() {
             try {
                 // Load model names
-                const modelResponse = await fetch('model_names.json');
+                const modelResponse = await fetch('data/model_names.json');
                 const modelJson = await modelResponse.json();
                 modelData = modelJson.model_names;
 
                 // Load grid names
-                const gridResponse = await fetch('grid_names.json');
+                const gridResponse = await fetch('data/grid_names.json');
                 const gridData = await gridResponse.json();
                 gridData.grid_names.forEach(grid => {
                     const option = document.createElement('option');
@@ -249,7 +249,7 @@
                 });
 
                 // Load HRU data
-                const hruResponse = await fetch('hrus.json');
+                const hruResponse = await fetch('data/hrus.json');
                 hruData = await hruResponse.json();
 
             } catch (error) {
