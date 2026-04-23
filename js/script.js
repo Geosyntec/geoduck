@@ -167,7 +167,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             conn.close();
         } catch (error) {
             console.error('Schema error:', error);
-            schemaContent.innerHTML = `<span class="text-danger">Error loading schema: ${error.message}</span>`;
+            schemaContent.innerHTML = `<span style="color:#b91c1c">Error loading schema: ${error.message}</span>`;
         }
     }
 
@@ -253,20 +253,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
     function displaySchema(schema) {
-        let html = '<div class="row">';
-        schema.forEach((col, index) => {
+        let html = '';
+        schema.forEach((col) => {
             const columnName = col.column_name;
             const columnType = col.column_type;
-            html += `
-                <div class="col-md-4 mb-2">
-                    <div class="border rounded p-2 bg-light">
-                        <strong>${columnName}</strong><br>
-                        <small class="text-muted">${columnType}</small>
-                    </div>
-                </div>
-            `;
+            html += `<div class="schema-pill"><span class="schema-pill-name">${columnName}</span><span class="schema-pill-type">${columnType}</span></div>`;
         });
-        html += '</div>';
         schemaContent.innerHTML = html;
     }
 
@@ -379,39 +371,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     function addFilterRow() {
         const filterBuilder = document.getElementById('filter-builder');
         const newFilterRow = document.createElement('div');
-        newFilterRow.className = 'filter-row mb-2';
+        newFilterRow.className = 'filter-row';
         newFilterRow.innerHTML = `
-            <div class="row g-2">
-                <div class="col-md-3">
-                    <select class="form-select filter-column">
-                        <option value="">Select column...</option>
-                        ${schemaData ? schemaData.map(col => `<option value="${col.column_name}">${col.column_name}</option>`).join('') : ''}
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <select class="form-select filter-operator">
-                        <option value="=">=</option>
-                        <option value="!=">!=</option>
-                        <option value=">">></option>
-                        <option value="<"><</option>
-                        <option value=">=">>=</option>
-                        <option value="<="><=</option>
-                        <option value="LIKE">LIKE</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <input type="text" class="form-control filter-value" placeholder="Value">
-                </div>
-                <div class="col-md-2">
-                    <select class="form-select filter-logic">
-                        <option value="AND">AND</option>
-                        <option value="OR">OR</option>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <button type="button" class="btn btn-outline-danger btn-sm remove-filter">Remove</button>
-                </div>
-            </div>
+            <select class="filter-column">
+                <option value="">Column…</option>
+                ${schemaData ? schemaData.map(col => `<option value="${col.column_name}">${col.column_name}</option>`).join('') : ''}
+            </select>
+            <select class="filter-operator">
+                <option value="=">=</option>
+                <option value="!=">!=</option>
+                <option value=">">&gt;</option>
+                <option value="<">&lt;</option>
+                <option value=">=">&gt;=</option>
+                <option value="<=">&lt;=</option>
+                <option value="LIKE">LIKE</option>
+            </select>
+            <input type="text" class="filter-value" placeholder="Value">
+            <select class="filter-logic">
+                <option value="AND">AND</option>
+                <option value="OR">OR</option>
+            </select>
+            <button type="button" class="btn btn-ghost btn-sm remove-filter">✕</button>
         `;
         filterBuilder.appendChild(newFilterRow);
         
@@ -442,7 +422,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ).join('');
                 
                 valueContainer.outerHTML = `
-                    <select class="form-control filter-value">
+                    <select class="filter-value">
                         <option value="">Select HRU...</option>
                         ${hruOptions}
                     </select>
@@ -451,7 +431,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
             // Restore regular text input
             if (valueContainer.tagName === 'SELECT') {
-                valueContainer.outerHTML = `<input type="text" class="form-control filter-value" placeholder="Value">`;
+                valueContainer.outerHTML = `<input type="text" class="filter-value" placeholder="Value">`;
             }
         }
     }
@@ -697,7 +677,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const endIndex = startIndex + rowsPerPage;
         const paginatedData = sortedData.slice(startIndex, endIndex);
 
-        const table = d3.select(tableContainer).append('table').attr('class', 'table table-striped table-hover');
+        const table = d3.select(tableContainer).append('table');
         const thead = table.append('thead');
         const tbody = table.append('tbody');
 
@@ -736,10 +716,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
 
         // Pagination controls
-        const paginationDiv = d3.select(tableContainer).append('div').attr('class', 'pagination mt-3');
+        const paginationDiv = d3.select(tableContainer).append('div').attr('class', 'pagination');
 
         paginationDiv.append('button')
-            .attr('class', 'btn btn-secondary me-2')
+            .attr('class', 'btn btn-ghost btn-sm')
             .attr('disabled', currentPage === 1 ? true : null)
             .text('Previous')
             .on('click', () => {
@@ -750,7 +730,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         paginationDiv.append('span').text(`Page ${currentPage} of ${totalPages}`);
 
         paginationDiv.append('button')
-            .attr('class', 'btn btn-secondary ms-2')
+            .attr('class', 'btn btn-ghost btn-sm')
             .attr('disabled', currentPage === totalPages ? true : null)
             .text('Next')
             .on('click', () => {
