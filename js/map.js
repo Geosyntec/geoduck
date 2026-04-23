@@ -563,7 +563,7 @@ function displayResults(data) {
     
     const columns = Object.keys(data[0]);
     
-    let html = '<table class="table table-striped table-hover"><thead><tr>';
+    let html = '<table><thead><tr>';
     columns.forEach(col => {
         html += `<th>${col}</th>`;
     });
@@ -699,42 +699,8 @@ function setExampleQuery(queryText) {
     }
 }
 
-// Theme management
-function initializeTheme() {
-    // Check for saved theme preference or default to light
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    setTheme(savedTheme);
-    
-    // Add event listener to theme toggle button
-    const themeToggle = document.getElementById('theme-toggle');
-    if (themeToggle) {
-        themeToggle.addEventListener('click', toggleTheme);
-    }
-}
-
-function setTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-    
-    // Update button icon
-    const themeToggle = document.getElementById('theme-toggle');
-    if (themeToggle) {
-        themeToggle.textContent = theme === 'dark' ? '☀️' : '🌙';
-        themeToggle.title = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
-    }
-}
-
-function toggleTheme() {
-    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
-    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    setTheme(newTheme);
-}
-
 // Initialize everything when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize theme first
-    initializeTheme();
-    
     // Initialize map
     setTimeout(() => {
         initializeMap();
